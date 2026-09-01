@@ -22,7 +22,7 @@
     "5174": { "label": "Consent UI", "visibility": "private" }
   },
   "postCreateCommand": "npm install",
-  "postStartCommand": "docker compose -f deploy/docker-compose.yaml up -d --build",
+  "postStartCommand": "docker compose -f deploy/docker-compose.yaml up -d --build && sleep 10 && docker compose -f deploy/docker-compose.yaml ps",
   "customizations": {
     "codespaces": {
       "openFiles": ["README.md", "HOW-IT-WORKS.md"]

@@ -1,5 +1,7 @@
 FROM node:20-alpine
 
+RUN apk add --no-cache curl wget postgresql-client
+
 WORKDIR /app
 
 # Copy all workspace manifests first so `npm ci` can resolve every workspace

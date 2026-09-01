@@ -33,6 +33,23 @@ services:
       timeout: 5s
       retries: 5
 
+  db-migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.base
+    container_name: screenkonect-migrate
+    working_dir: /app
+    command: sh -c "sleep 5 && npm run db:migrate -w @screenkonect/db && echo 'migrations done'"
+    environment:
+      DATABASE_URL: postgresql://screenkonect:screenkonect@postgres:5432/screenkonect
+    volumes:
+      - ..:/app
+      - /app/node_modules
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   auth:
     build:
       context: ..
@@ -58,12 +75,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 15s
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/healthz | grep -q ok || exit 1"]
+      interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 30s
 
   session:
     build:
@@ -90,12 +109,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4001/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 15s
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4001/healthz | grep -q ok || exit 1"]
+      interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 30s
 
   signaling:
     build:
@@ -122,12 +143,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4002/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 15s
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4002/healthz | grep -q ok || exit 1"]
+      interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 30s
 
   audit:
     build:
@@ -154,12 +177,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4003/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 15s
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4003/healthz | grep -q ok || exit 1"]
+      interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 30s
 
   device:
     build:
@@ -186,12 +211,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4004/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 15s
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4004/healthz | grep -q ok || exit 1"]
+      interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 30s
 
   web-dashboard:
     build:
