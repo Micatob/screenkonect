@@ -1,0 +1,21 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy all workspace manifests first so `npm ci` can resolve every workspace
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/db/package.json ./packages/db/
+COPY packages/config/package.json ./packages/config/
+COPY services/auth/package.json ./services/auth/
+COPY services/session/package.json ./services/session/
+COPY services/signaling/package.json ./services/signaling/
+COPY services/audit/package.json ./services/audit/
+COPY services/device/package.json ./services/device/
+COPY apps/web-dashboard/package.json ./apps/web-dashboard/
+COPY apps/client-consent-ui/package.json ./apps/client-consent-ui/
+RUN npm ci
+
+COPY . .
+
+EXPOSE 4000 4001 4002 4003 4004 5173 5174

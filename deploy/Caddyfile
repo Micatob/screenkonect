@@ -1,0 +1,58 @@
+:80 {
+	# 1. WebSocket signaling
+	handle /ws* {
+		reverse_proxy signaling:4002
+	}
+
+	# 2. APIs - must be before frontend
+	handle /v1/auth/* {
+		reverse_proxy auth:4000
+	}
+	handle /v1/sessions/* {
+		reverse_proxy session:4001
+	}
+	handle /v1/sessions {
+		reverse_proxy session:4001
+	}
+	handle /v1/devices/* {
+		reverse_proxy device:4004
+	}
+	handle /v1/devices {
+		reverse_proxy device:4004
+	}
+	handle /v1/audit/* {
+		reverse_proxy audit:4003
+	}
+	handle /v1/* {
+		reverse_proxy auth:4000
+	}
+
+	# 3. Client consent UI - join links
+	# e.g. /join/ABC123?token=xxx&session_id=yyy
+	handle /join/* {
+		reverse_proxy client-consent-ui:5174
+	}
+	handle /join {
+		reverse_proxy client-consent-ui:5174
+	}
+
+	# 4. Vite dev assets for consent UI when loaded from /join page
+	# (Referer contains /join) -> route HMR/assets to consent-ui, not dashboard
+	@consentAssets {
+		path /@vite/* /@fs/* /src/* /node_modules/* /assets/*
+		header Referer *join*
+	}
+	handle @consentAssets {
+		reverse_proxy client-consent-ui:5174
+	}
+
+	# 5. Everything else -> technician dashboard
+	handle {
+		reverse_proxy web-dashboard:5173
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

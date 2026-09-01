@@ -1,0 +1,33 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build output
+dist
+build
+out
+target
+**/dist
+**/target
+
+# Environment & secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Local runtime
+runtime
+logs
+*.log
+
+# IDE / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.github
+.dockerignore

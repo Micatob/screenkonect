@@ -1,0 +1,407 @@
+openapi: 3.0.3
+info:
+  title: ScreenKonect API
+  description: Consent-based remote desktop support tool API
+  version: 0.1.0
+  contact:
+    name: ScreenKonect Support
+    email: support@screenkonect.example.com
+
+servers:
+  - url: https://api.screenkonect.com
+    description: Production
+  - url: http://localhost:4000
+    description: Development
+
+paths:
+  /v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, display_name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                display_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '409':
+          description: Email already registered
+
+  /v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+
+  /v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Invalid refresh token
+
+  /v1/sessions:
+    post:
+      tags: [Sessions]
+      summary: Create a new session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+    get:
+      tags: [Sessions]
+      summary: List sessions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Sessions list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Session'
+
+  /v1/sessions/{id}:
+    get:
+      tags: [Sessions]
+      summary: Get session details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session:
+                    $ref: '#/components/schemas/Session'
+        '404':
+          description: Session not found
+
+  /v1/sessions/{id}/end:
+    post:
+      tags: [Sessions]
+      summary: End session
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session ended
+        '404':
+          description: Session not found
+
+  /v1/sessions/join:
+    post:
+      tags: [Sessions]
+      summary: Join session (client)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinSessionRequest'
+      responses:
+        '200':
+          description: Session joined
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session:
+                    $ref: '#/components/schemas/Session'
+                  requires_consent:
+                    type: boolean
+        '401':
+          description: Invalid token
+
+  /v1/sessions/{id}/approve:
+    post:
+      tags: [Consent]
+      summary: Approve session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveSessionRequest'
+      responses:
+        '200':
+          description: Session approved
+        '400':
+          description: Invalid consent state
+
+  /v1/sessions/{id}/reject:
+    post:
+      tags: [Consent]
+      summary: Reject session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Session rejected
+
+  /v1/sessions/{id}/revoke:
+    post:
+      tags: [Consent]
+      summary: Revoke active session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session revoked
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+        token_type:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+        token_type:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        role:
+          type: string
+          enum: [technician, admin]
+        created_at:
+          type: string
+          format: date-time
+
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        technician_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [created, pending_approval, active, paused, ended]
+        session_code:
+          type: string
+        consent_state:
+          type: string
+          enum: [none, pending, approved, denied, revoked]
+        permissions:
+          $ref: '#/components/schemas/SessionPermissions'
+        client_platform:
+          type: string
+          enum: [windows, macos, linux]
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+
+    SessionPermissions:
+      type: object
+      properties:
+        view:
+          type: boolean
+        control:
+          type: boolean
+        clipboard:
+          type: boolean
+        file_transfer:
+          type: boolean
+        audio:
+          type: boolean
+
+    CreateSessionRequest:
+      type: object
+      properties:
+        max_duration_minutes:
+          type: integer
+          minimum: 1
+          maximum: 480
+        idle_timeout_minutes:
+          type: integer
+          minimum: 1
+          maximum: 120
+        recording_enabled:
+          type: boolean
+
+    JoinSessionRequest:
+      type: object
+      required: [token, platform]
+      properties:
+        token:
+          type: string
+        platform:
+          type: string
+          enum: [windows, macos, linux]
+        device_name:
+          type: string
+
+    ApproveSessionRequest:
+      type: object
+      properties:
+        permissions:
+          $ref: '#/components/schemas/SessionPermissions'
+
+    SessionResponse:
+      type: object
+      properties:
+        session:
+          $ref: '#/components/schemas/Session'
+        join_url:
+          type: string
+          format: uri
+        join_token:
+          type: string

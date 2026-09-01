@@ -1,0 +1,38 @@
+{
+  "name": "screenkonect",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Consent-based remote desktop support tool",
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "dev": "concurrently \"cross-env PORT=4000 npm run dev -w services/auth\" \"cross-env PORT=4001 npm run dev -w services/session\" \"cross-env PORT=4002 npm run dev -w services/signaling\" \"cross-env PORT=4003 npm run dev -w services/audit\" \"cross-env PORT=4004 npm run dev -w services/device\" \"npm run dev -w apps/web-dashboard\" \"npm run dev -w apps/client-consent-ui\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:migrate": "npm run db:migrate -w @screenkonect/db",
+    "db:generate": "npm run db:generate -w @screenkonect/db",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "concurrently": "^9.0.0",
+    "cross-env": "^10.1.0",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
+    "eslint": "^9.0.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

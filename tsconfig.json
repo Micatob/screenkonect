@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./packages/db" },
+    { "path": "./packages/config" },
+    { "path": "./services/auth" },
+    { "path": "./services/session" },
+    { "path": "./services/signaling" },
+    { "path": "./services/audit" },
+    { "path": "./services/device" },
+    { "path": "./apps/web-dashboard" },
+    { "path": "./apps/client-consent-ui" }
+  ]
+}

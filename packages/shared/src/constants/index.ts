@@ -1,0 +1,17 @@
+export const SESSION_CODE_LENGTH = 8;
+export const CLIENT_TOKEN_LENGTH = 32;
+export const MAX_LOGIN_ATTEMPTS = 5;
+export const LOGIN_LOCKOUT_MS = 30 * 60 * 1000; // 30 minutes
+export const SESSION_MAX_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+export const SESSION_DEFAULT_DURATION_MINUTES = 60;
+export const SESSION_IDLE_TIMEOUT_MINUTES = 15;
+export const TOKEN_EXPIRY_MINUTES = 15;
+export const REFRESH_TOKEN_EXPIRY_DAYS = 30;
+export const CONSENT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+export const MAX_SESSIONS_PER_USER = 10;
+export const MAX_VIEWERS_PER_SESSION = 5;
+export const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+export const RATE_LIMIT_MAX_REQUESTS = 100;
+export const SIGNALING_RATE_LIMIT_MAX = 50;
+export const INPUT_RATE_LIMIT_MAX = 200;
+export const TURN_CREDENTIAL_EXPIRY = 86400; // 24 hours in seconds

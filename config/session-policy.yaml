@@ -1,0 +1,13 @@
+default_expiry_minutes: 60
+max_expiry_minutes: 480
+idle_timeout_minutes: 15
+one_time_link_usage: true
+consent_timeout_ms: 300000
+require_client_approval: true
+allow_remote_control: true
+allow_file_transfer: false
+allow_clipboard_sync: false
+allow_recording: false
+require_recording_consent: true
+max_viewers_per_session: 5
+audit_log_retention_days: 90

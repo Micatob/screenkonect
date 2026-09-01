@@ -1,0 +1,4 @@
+log_level: "info"
+enable_tracing: false
+enable_metrics: true
+metrics_port: 9090

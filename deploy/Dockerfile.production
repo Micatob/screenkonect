@@ -1,0 +1,77 @@
+# Stage 1: Build
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/db/package.json ./packages/db/
+COPY packages/config/package.json ./packages/config/
+COPY services/auth/package.json ./services/auth/
+COPY services/session/package.json ./services/session/
+COPY services/signaling/package.json ./services/signaling/
+COPY services/audit/package.json ./services/audit/
+COPY services/device/package.json ./services/device/
+
+# Install dependencies
+RUN npm ci --only=production && \
+    cp -R node_modules /tmp/prod_modules && \
+    npm ci
+
+# Copy source code
+COPY . .
+
+# Build TypeScript
+RUN npm run build
+
+# Stage 2: Production
+FROM node:20-alpine AS production
+
+WORKDIR /app
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Create non-root user
+RUN addgroup -g 1001 -S screenkonect && \
+    adduser -S screenkonect -u 1001
+
+# Copy built artifacts
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/packages/shared/package.json ./packages/shared/
+COPY --from=builder /app/packages/db/dist ./packages/db/dist
+COPY --from=builder /app/packages/db/package.json ./packages/db/
+COPY --from=builder /app/packages/config/dist ./packages/config/dist
+COPY --from=builder /app/packages/config/package.json ./packages/config/
+COPY --from=builder /tmp/prod_modules ./node_modules
+
+# Copy service files
+COPY --from=builder /app/services/auth/dist ./services/auth/dist
+COPY --from=builder /app/services/auth/package.json ./services/auth/
+COPY --from=builder /app/services/session/dist ./services/session/dist
+COPY --from=builder /app/services/session/package.json ./services/session/
+COPY --from=builder /app/services/signaling/dist ./services/signaling/dist
+COPY --from=builder /app/services/signaling/package.json ./services/signaling/
+COPY --from=builder /app/services/audit/dist ./services/audit/dist
+COPY --from=builder /app/services/audit/package.json ./services/audit/
+COPY --from=builder /app/services/device/dist ./services/device/dist
+COPY --from=builder /app/services/device/package.json ./services/device/
+
+# Copy config files
+COPY --from=builder /app/config ./config
+
+# Set ownership
+RUN chown -R screenkonect:screenkonect /app
+
+USER screenkonect
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:4000/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
+
+EXPOSE 4000 4001 4002 4003 4004
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "services/auth/dist/index.js"]
+

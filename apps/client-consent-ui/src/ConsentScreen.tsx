@@ -1,0 +1,201 @@
+import { useState } from 'react';
+import { Shield, Eye, MousePointer, Clipboard, FileUp, Volume2 } from 'lucide-react';
+
+interface ConsentScreenProps {
+  sessionId: string;
+  onApprove: (permissions: {
+    view: boolean;
+    control: boolean;
+    clipboard: boolean;
+    file_transfer: boolean;
+    audio: boolean;
+  }) => void;
+  onReject: () => void;
+}
+
+export function ConsentScreen({ onApprove, onReject }: ConsentScreenProps) {
+  const [permissions, setPermissions] = useState({
+    view: true,
+    control: false,
+    clipboard: false,
+    file_transfer: false,
+    audio: false,
+  });
+  const [approving, setApproving] = useState(false);
+
+  const handleApprove = async () => {
+    setApproving(true);
+    await onApprove(permissions);
+  };
+
+  const togglePermission = (key: keyof typeof permissions) => {
+    if (key === 'view') return;
+    setPermissions((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="w-full max-w-lg">
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+          <div className="bg-blue-600 p-6 text-center">
+            <Shield className="w-12 h-12 text-white mx-auto mb-3" />
+            <h1 className="text-2xl font-bold text-white">Remote Support Request</h1>
+            <p className="text-blue-100 mt-2">A technician is requesting access to your device</p>
+          </div>
+
+          <div className="p-6">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+              <h2 className="font-semibold text-yellow-800 mb-2">What will be shared:</h2>
+              <ul className="text-sm text-yellow-700 space-y-1">
+                <li className="flex items-center gap-2">
+                  <Eye className="w-4 h-4" />
+                  Screen content (required)
+                </li>
+                {permissions.control && (
+                  <li className="flex items-center gap-2">
+                    <MousePointer className="w-4 h-4" />
+                    Mouse and keyboard control
+                  </li>
+                )}
+                {permissions.clipboard && (
+                  <li className="flex items-center gap-2">
+                    <Clipboard className="w-4 h-4" />
+                    Clipboard access
+                  </li>
+                )}
+                {permissions.file_transfer && (
+                  <li className="flex items-center gap-2">
+                    <FileUp className="w-4 h-4" />
+                    File transfer
+                  </li>
+                )}
+                {permissions.audio && (
+                  <li className="flex items-center gap-2">
+                    <Volume2 className="w-4 h-4" />
+                    Audio sharing
+                  </li>
+                )}
+              </ul>
+            </div>
+
+            <h3 className="font-semibold text-gray-900 mb-3">Choose permissions:</h3>
+            <div className="space-y-3 mb-6">
+              <PermissionToggle
+                icon={<Eye className="w-5 h-5" />}
+                label="View screen"
+                description="Required for support"
+                checked={permissions.view}
+                disabled={true}
+                onChange={() => {}}
+              />
+              <PermissionToggle
+                icon={<MousePointer className="w-5 h-5" />}
+                label="Remote control"
+                description="Allow technician to control mouse and keyboard"
+                checked={permissions.control}
+                onChange={() => togglePermission('control')}
+              />
+              <PermissionToggle
+                icon={<Clipboard className="w-5 h-5" />}
+                label="Clipboard sync"
+                description="Allow copying text between devices"
+                checked={permissions.clipboard}
+                onChange={() => togglePermission('clipboard')}
+              />
+              <PermissionToggle
+                icon={<FileUp className="w-5 h-5" />}
+                label="File transfer"
+                description="Allow sending and receiving files"
+                checked={permissions.file_transfer}
+                onChange={() => togglePermission('file_transfer')}
+              />
+              <PermissionToggle
+                icon={<Volume2 className="w-5 h-5" />}
+                label="Audio sharing"
+                description="Share system audio"
+                checked={permissions.audio}
+                onChange={() => togglePermission('audio')}
+              />
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <p className="text-sm text-gray-600">
+                <strong>Important:</strong> You can end this session at any time by closing this
+                window or clicking the "End Session" button. The technician will lose access
+                immediately.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={onReject}
+                className="flex-1 py-3 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Deny
+              </button>
+              <button
+                onClick={handleApprove}
+                disabled={approving}
+                className="flex-1 py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {approving ? 'Approving...' : 'Approve'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface PermissionToggleProps {
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: () => void;
+}
+
+function PermissionToggle({
+  icon,
+  label,
+  description,
+  checked,
+  disabled,
+  onChange,
+}: PermissionToggleProps) {
+  return (
+    <label
+      className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+        checked
+          ? 'bg-blue-50 border-blue-200'
+          : 'bg-white border-gray-200 hover:bg-gray-50'
+      } ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      <div className={`${checked ? 'text-blue-600' : 'text-gray-400'}`}>{icon}</div>
+      <div className="flex-1">
+        <div className="font-medium text-gray-900">{label}</div>
+        <div className="text-sm text-gray-500">{description}</div>
+      </div>
+      <div
+        className={`w-10 h-6 rounded-full transition-colors relative ${
+          checked ? 'bg-blue-600' : 'bg-gray-300'
+        }`}
+      >
+        <div
+          className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+            checked ? 'translate-x-5' : 'translate-x-1'
+          }`}
+        />
+      </div>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        className="sr-only"
+      />
+    </label>
+  );
+}
