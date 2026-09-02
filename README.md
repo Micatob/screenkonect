@@ -987,38 +987,43 @@ Send those to the client instead of your local addresses. The web apps use
 relative `/v1` / `/ws` paths, so they keep working behind the tunnel with no
 code changes.
 
-#### Option 3: Tailscale (Easiest for Private/Team Access — Free for Personal Use)
+#### Option 3: Tailscale Funnel (Recommended for Nigeria - Free, No Port Forward, 1 Port)
 
-Tailscale creates a **private WireGuard network** between your machines. It is
-the best option when the client is you/your team (the client does **not** need
-to install anything if they only open a link — the web apps are served over
-your tailnet).
+Tailscale creates a **private WireGuard network** + **public Funnel** on top of your single gateway `8090` (`deploy/Caddyfile:1`). The client needs **no install, just a browser**. Free for personal use (100 devices, no card).
 
-1. Install Tailscale on the machine running ScreenKonect:
-   ```powershell
-   winget install tailscale.tailscale
-   ```
-2. Sign in: `tailscale up`
-3. Find your tailnet IP: `tailscale ip -4` (looks like `100.x.y.z`)
-4. Access from your other devices (phone, laptop, friend on your tailnet):
-   - Dashboard: `http://100.x.y.z:5173`
-   - Client UI: `http://100.x.y.z:5174`
-5. Optional — HTTPS with a valid certificate instead of raw IP:
-   ```bash
-   tailscale serve --bg 5173
-   tailscale serve --bg 5174
-   tailscale serve --bg 4002   # signaling (WebSocket)
-   ```
-   Then open `https://<machine-name>.<tailnet-name>.ts.net:5173`.
+**Why 8090:** `docker-compose.yaml:247` exposes **only** `8090->80` via `gateway` (Caddy). It routes `/`→dashboard:5173, `/join/*`→consent-ui:5174, `/v1/*`→APIs, `/ws`→signaling. `8080` is taken by chael SIEM locally, so ScreenKonect uses `8090`.
 
-**Share without installing Tailscale:** create a MagicDNS share link in the
-Tailscale admin console (`tailscale file`/Machines → Share) or simply share
-the `https://<machine>.<tailnet>.ts.net` URLs — the person only needs a
-browser.
+1. Install Tailscale (already done on this PC - `C:\Program Files\Tailscale\tailscale.exe` `1.102.3`):
+    ```powershell
+    # If not installed:
+    Invoke-WebRequest -Uri https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe -OutFile $env:TEMP\tailscale-setup.exe; Start-Process $env:TEMP\tailscale-setup.exe /S -Wait
+    ```
+2. Sign in (already `tobi53154@` `100.65.87.116`):
+    ```powershell
+    & "C:\Program Files\Tailscale\tailscale.exe" up
+    # browser opens -> login with Google/GitHub/Microsoft
+    ```
+3. Enable **Serve/Funnel** once (one click per tailnet):
+   - Visit `https://login.tailscale.com/admin/machines` -> your `desktop-a780de3` -> enable `Funnel` (or open the link `tailscale funnel` prints: `https://login.tailscale.com/f/funnel?node=...`)
+   - For private tailnet only (no public), enable `Serve` instead: `https://login.tailscale.com/f/serve?node=...`
 
-> Which one to pick? Cloudflare Tunnel = anyone with the URL can connect
-> (public). Tailscale = only your tailnet devices can connect (private,
-> more secure). Both work side by side.
+4. Expose single gateway (public internet, no port forward):
+    ```powershell
+    & "C:\Program Files\Tailscale\tailscale.exe" funnel --bg 8090
+    # prints: https://desktop-a780de3.tailXXXX.ts.net
+    # check: & "C:\Program Files\Tailscale\tailscale.exe" funnel status
+    ```
+    - You: `https://desktop-a780de3.tailXXXX.ts.net` (dashboard)
+    - Client: `https://desktop-a780de3.tailXXXX.ts.net/join/ABC123?token=xyz` (join link - dashboard generates with `8090` host, replace `localhost:8090` with funnel host)
+
+5. Private tailnet only (client must be on your tailnet, more secure):
+    ```powershell
+    & "C:\Program Files\Tailscale\tailscale.exe" serve --bg 8090
+    # https://desktop-a780de3.tailXXXX.ts.net (tailnet only)
+    ```
+    Share via `Admin Console` -> `Machines` -> `Share` or invite client to tailnet.
+
+> Which one to pick? `Funnel` = anyone with URL (public, like Cloudflare). `Serve` = only tailnet (private). Gateway `8090` makes both 1 URL, not 7.
 
 ### Running Alongside Other Docker Stacks (e.g. a SIEM)
 
@@ -1033,8 +1038,9 @@ network, so it will not interfere with your SIEM containers.
 | 5432 | PostgreSQL | container-internal service; published for host tools |
 | 6380 | Redis | deliberately different from the common 6379 |
 | 4000-4004 | Auth / Session / Signaling / Audit / Device APIs | |
-| 5173 | Technician Dashboard | |
-| 5174 | Client Consent UI | |
+| 5173 | Technician Dashboard | direct, or via gateway 8090 `/` |
+| 5174 | Client Consent UI | direct, or via gateway 8090 `/join` |
+| 8090 | Gateway (Caddy) | **Single public port** - routes `/`, `/join/*`, `/v1/*`, `/ws` |
 
 **Before starting, verify nothing else on your host already uses these
 ports** (your SIEM included):

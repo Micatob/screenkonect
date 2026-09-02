@@ -37,7 +37,7 @@ This starts **all the pieces** in little boxes (containers):
 - 2 websites (Dashboard + Consent Page)
 
 ### 2. You Open the Dashboard
-Go to: **http://localhost:5173**
+Go to: **http://localhost:8090** (gateway single-port) or **http://localhost:5173** direct
 user email: `you@screenkonect.local`
 user password: ScreenKonect123!`
 Log in → Click **"New Session"**
@@ -50,8 +50,9 @@ Log in → Click **"New Session"**
 ### 3. You Get a Magic Link
 The dashboard shows a link like:
 ```
-http://localhost:5174/join/ABC123?token=xyz789
+http://localhost:8090/join/ABC123?token=xyz789
 ```
+(via gateway - single port. Old direct was `5174`. Gateway auto-generates correct host `services/session/src/routes/sessions.ts:101`)
 **Copy this link and send it to your friend** (email, text, Discord, carrier pigeon...)
 
 ### 4. Friend Opens the Link
@@ -117,8 +118,9 @@ docker compose -f deploy/docker-compose.yaml up -d --build
 | `screenkonect-signaling` | 4002 | Connection matcher |
 | `screenkonect-audit` | 4003 | Diary keeper |
 | `screenkonect-device` | 4004 | Device manager |
-| `screenkonect-web-dashboard` | **5173** | **YOUR dashboard** |
-| `screenkonect-client-consent-ui` | **5174** | **Friend's page** |
+| `screenkonect-web-dashboard` | **5173** | **YOUR dashboard** (via gateway 8090 `/`) |
+| `screenkonect-client-consent-ui` | **5174** | **Friend's page** (via gateway 8090 `/join`) |
+| `screenkonect-gateway` | **8090** | **Single public port** - Caddy routes all |
 
 ### Check It's Working
 ```bash
@@ -140,87 +142,77 @@ docker compose -f deploy/docker-compose.yaml up -d
 
 ---
 
-## ☁️ Cloudflare Tunnel: Share With Anyone (FREE)
+## ☁️ Share With Anyone (Pick One - Gateway 8090 Makes It 1 Port)
 
 ### The Problem
-Your friend is at **their house** (different WiFi). They can't reach your `localhost:5174`.
+Your friend is at **their house** (different WiFi). They can't reach your `localhost:8090`.
 
 ### The Old Way (Hard)
 - Log into router
-- Forward ports 4000-4004, 5173, 5174
-- Hope your ISP doesn't block it
+- Forward ports 4000-4004, 5173, 5174, 8090
+- Hope your ISP doesn't block it (Nigeria ISPs often use CGNAT - no public IP)
 - Get a static IP or use dynamic DNS
-- **Scary and breaks often**
+- **Scary and breaks often - now only 1 port 8090 via gateway, not 7**
 
-### The Cloudflare Way (Easy, Free, 52MB)
-Cloudflare Tunnel makes a **secret underground tunnel** from your computer to Cloudflare's big computers. Your friend uses a nice `https://` link. **No router changes. No open ports.**
+### Option A: Tailscale Funnel (RECOMMENDED for Nigeria - Free, No Port Forward, 1 Port)
 
-### Step 1: Get cloudflared (Already Done!)
-You already downloaded it: `C:\Users\Hermes\cloudflared.exe` (~52 MB)
+Tailscale Funnel exposes your **local gateway 8090** to the public internet via WireGuard. Client needs **nothing** - just a browser. Free (no card), already installed on this PC `100.65.87.116`.
 
-### Step 2: Start Your Server First
-```bash
+**Step 1: Enable Funnel once (one click):**
+Visit the link `tailscale funnel` printed:
+```
+https://login.tailscale.com/f/funnel?node=npV6HLYRjb11CNTRL
+```
+Or `https://login.tailscale.com/admin/machines` -> `desktop-a780de3` -> `...` -> `Enable Funnel` / `Edit route settings`.
+
+**Step 2: Start Server + Funnel:**
+```powershell
 docker compose -f deploy/docker-compose.yaml up -d
+# wait healthy: docker compose -f deploy/docker-compose.yaml ps
+& "C:\Program Files\Tailscale\tailscale.exe" funnel --bg 8090
+# prints: https://desktop-a780de3.tailxxxxx.ts.net
+# check: & "C:\Program Files\Tailscale\tailscale.exe" funnel status
 ```
-Wait for all containers to say "healthy"
 
-### Step 3: Open TWO Terminal Windows
+**Step 3: Use It!**
+- You open: `https://desktop-a780de3.tailxxxxx.ts.net` (dashboard)
+- Friend opens: `https://desktop-a780de3.tailxxxxx.ts.net/join/ABC123?token=xyz789` (replace `localhost:8090` in dashboard link with funnel host)
+- Works exactly like local, but over the internet via gateway `deploy/Caddyfile:1`
 
-**Terminal 1 — Your Dashboard (Port 5173):**
+**Stop:** `& "C:\Program Files\Tailscale\tailscale.exe" funnel --bg --off` + `docker compose down`
+
+**Private alternative (tailnet only, more secure):**
 ```powershell
-C:\Users\Hermes\cloudflared.exe tunnel --url http://localhost:5173
+& "C:\Program Files\Tailscale\tailscale.exe" serve --bg 8090
+# https://desktop-a780de3.tailxxxxx.ts.net - only tailnet devices can open (need to invite friend to tailnet)
+# enable via: https://login.tailscale.com/f/serve?node=npV6HLYRjb11CNTRL
 ```
-It prints something like:
-```
-https://happy-cat-1234.trycloudflare.com
-```
-**→ This is YOUR link. Bookmark it.**
 
-**Terminal 2 — Friend's Consent Page (Port 5174):**
+### Option B: Cloudflare Tunnel (Also Free, 1 Port via Gateway)
+
+Also works via single `8090` now (old way needed 2 tunnels for 5173+5174).
+
 ```powershell
-C:\Users\Hermes\cloudflared.exe tunnel --url http://localhost:5174
+C:\Users\Hermes\cloudflared.exe tunnel --url http://localhost:8090
+# prints: https://happy-cat-1234.trycloudflare.com
+# You: https://happy-cat-1234.trycloudflare.com
+# Friend: https://happy-cat-1234.trycloudflare.com/join/ABC123?token=xyz
+# Keep terminal open
 ```
-It prints:
-```
-https://sleepy-dog-5678.trycloudflare.com
-```
-**→ Send THIS link to your friend.**
 
-### Step 4: Use It!
-- You open: `https://happy-cat-1234.trycloudflare.com`
-- Friend opens: `https://sleepy-dog-5678.trycloudflare.com/join/ABC123?token=xyz789`
-- Everything works exactly like local — but over the internet!
-
-### Keep Terminals Open
-**The tunnel only works while those terminal windows are open.**
-- Close terminal = tunnel closes
-- Minimize is fine, just don't click X
-
-### Pro Tip: Make It Permanent (Free Account)
-```powershell
-# 1. Login (opens browser)
-C:\Users\Hermes\cloudflared.exe tunnel login
-
-# 2. Create named tunnel
-C:\Users\Hermes\cloudflared.exe tunnel create screenkonect
-
-# 3. Make config file at C:\Users\Hermes\.cloudflared\config.yml
-```
+**Permanent Cloudflare (one hostname):**
 ```yaml
+# C:\Users\Hermes\.cloudflared\config.yml
 tunnel: screenkonect
 credentials-file: C:\Users\Hermes\.cloudflared\<tunnel-id>.json
 ingress:
-  - hostname: dashboard.yourdomain.com
-    service: http://localhost:5173
-  - hostname: consent.yourdomain.com
-    service: http://localhost:5174
+  - hostname: screenkonect.yourdomain.com
+    service: http://localhost:8090
   - service: http_status:404
 ```
 ```powershell
-# 4. Run it (can run in background as a service)
 C:\Users\Hermes\cloudflared.exe tunnel run screenkonect
 ```
-Now you get **permanent addresses** like `https://dashboard.yourdomain.com` instead of random ones.
 
 ---
 
@@ -228,24 +220,29 @@ Now you get **permanent addresses** like `https://dashboard.yourdomain.com` inst
 
 ### First Time Setup
 - [ ] Install Docker Desktop
+- [ ] Install Tailscale (already done: `C:\Program Files\Tailscale\tailscale.exe`)
 - [ ] Run `docker compose -f deploy/docker-compose.yaml up -d --build`
-- [ ] Wait for all "healthy"
-- [ ] Open http://localhost:5173
+- [ ] Wait for all "healthy" (`docker compose ps` - 10 containers incl. gateway 8090)
+- [ ] Open http://localhost:8090
 - [ ] Register account
 - [ ] Click "New Session"
 - [ ] Test locally first (open consent link in another browser tab)
 
-### For Internet Access
+### For Internet Access (Tailscale Funnel - 1 Port)
 - [ ] Start docker stack
-- [ ] Open Terminal 1: `cloudflared tunnel --url http://localhost:5173`
-- [ ] Open Terminal 2: `cloudflared tunnel --url http://localhost:5174`
-- [ ] Copy the two `https://*.trycloudflare.com` URLs
-- [ ] Send the **consent URL** (port 5174 one) to friend with the join token
-- [ ] Keep both terminals open during session
+- [ ] Enable Funnel once: visit `https://login.tailscale.com/f/funnel?node=...` (from `tailscale funnel` output)
+- [ ] Run: `& "C:\Program Files\Tailscale\tailscale.exe" funnel --bg 8090`
+- [ ] Copy `https://desktop-a780de3.tailxxxxx.ts.net`
+- [ ] Send `https://desktop-a780de3.tailxxxxx.ts.net/join/xxx?token=yyy` to friend (replace localhost:8090)
+- [ ] Keep funnel running during session
+
+### Alternative: Cloudflare (1 Port via Gateway)
+- [ ] `C:\Users\Hermes\cloudflared.exe tunnel --url http://localhost:8090`
+- [ ] Send `https://xxx.trycloudflare.com/join/xxx` link
 
 ### When Done
 - [ ] Friend clicks "End Session" or you click "End Session"
-- [ ] Close cloudflared terminals (Ctrl+C)
+- [ ] `& "C:\Program Files\Tailscale\tailscale.exe" funnel --bg --off` or `Ctrl+C` cloudflared
 - [ ] `docker compose -f deploy/docker-compose.yaml down`
 
 ---

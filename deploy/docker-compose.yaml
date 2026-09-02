@@ -275,7 +275,7 @@ services:
     image: caddy:2-alpine
     container_name: screenkonect-gateway
     ports:
-      - "${SK_GATEWAY_PORT:-8080}:80"
+      - "${SK_GATEWAY_PORT:-8090}:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     restart: unless-stopped
