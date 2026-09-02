@@ -1,26 +1,33 @@
 # ScreenKonect — Session Handover Notes
 
-_Last updated: 2026-09-02 (session state saved by user request - single-port gateway + Codespaces)_
+_Last updated: 2026-09-02 02:00 WAT - Docker closed by user, Tailscale green, ready to resume_
 
-## Resume / How to pick this back up
+## Resume / How to pick this back up (DOCKER CLOSED - YOU ARE HERE)
 
-Stack is currently **running** in Docker Desktop. To confirm before using:
-
-```powershell
-docker compose -f deploy/docker-compose.yaml ps        # all should be "healthy"/"Up"
-```
-
-If it's stopped, start it (no rebuild needed — images cached):
+**You closed Docker - next time you return:**
 
 ```powershell
+# 1. Start Docker Desktop first, wait green
+# 2. Start stack (single-port gateway 8090 avoids chael 8080 conflict, .env SK_GATEWAY_PORT=8090)
 docker compose -f deploy/docker-compose.yaml up -d
+docker compose -f deploy/docker-compose.yaml ps  # expect 10 Up (healthy) incl gateway 0.0.0.0:8090->80
+
+# 3. Verify gateway
+Invoke-WebRequest http://localhost:8090 -UseBasicParsing | Select StatusCode # 200
+Invoke-WebRequest http://100.65.87.116:8090 -UseBasicParsing | Select StatusCode # 200 via Tailscale IP
+
+# 4. Tailscale is already installed + green (100.65.87.116 tobi53154@)
+# Enable Funnel once if not yet done:
+# Visit https://login.tailscale.com/f/funnel?node=npV6HLYRjb11CNTRL -> Enable
+& "C:\Program Files\Tailscale\tailscale.exe" funnel --bg 8090
+& "C:\Program Files\Tailscale\tailscale.exe" funnel status # prints https://desktop-a780de3.tailXXXX.ts.net
+
+# 5. Open dashboard via funnel
+# https://desktop-a780de3.tailXXXX.ts.net (or http://localhost:8090 locally)
+# Login: you@screenkonect.local / ScreenKonect123!
 ```
 
-Then open **http://localhost:5173** and log in with the dev account created this
-session:
-
-- Email: `you@screenkonect.local`
-- Password: `ScreenKonect123!`
+If `docker compose ps` still shows `Exited (137)` for auth/session/signaling after restart (previous hang), run `wsl --shutdown` then reopen Docker Desktop and `docker compose up -d` again.
 
 **What was fixed this session (read before debugging):**
 - Dashboard had no sign-up UI → accounts are made via `POST /v1/auth/register`.
@@ -30,14 +37,15 @@ session:
 - If env in `deploy/docker-compose.yaml` is ever changed, recreate with
   `up -d` (not `restart`) or new `VITE_*_TARGET` vars won't apply.
 
-## Current state (VERIFIED WORKING - 2026-09-02)
+## Current state (DOCKER CLOSED 2026-09-02 02:00 - READY TO RESUME)
 
-- Git remote is now **private GitHub** `Micatob/screenkonect` (`https://github.com/Micatob/screenkonect`, branch `main`, commits `d063e73` + `376dee8` + `82c4c2e`). Local git user `Hermesfury <tobi53154@gmail.com>` token `gho_...fRi` (Micatob).
-- **Single-port gateway** added: `deploy/Caddyfile` + `deploy/docker-compose.yaml:247` `gateway:8080` (caddy:2-alpine) routes `/`→dashboard:5173, `/join/*`→consent-ui:5174, `/v1/auth`→auth:4000, `/v1/sessions`→session:4001, `/ws`→signaling:4002, `/v1/devices`→device:4004, `/v1/audit`→audit:4003. **Expose only 8080** instead of 7 ports.
-- **Codespaces** ready: `.devcontainer/devcontainer.json` forwards 8080 as `public`, auto `docker compose up -d --build`. 10 ports forwarded (8080 gateway + 5173/5174 + 4000-4004 + 5432/6380). Single public URL `https://xxx-8080.app.github.dev` serves both dashboard and join links (`services/session/src/routes/sessions.ts:101` uses `request.headers.host`).
-- **DB auto-migrate** added: `db-migrate` service (depends_on postgres healthy, `restart: no`) runs `npm run db:migrate -w @screenkonect/db`. Backends now depend_on `db-migrate: completed`. Healthchecks switched from `node -e fetch` to `wget -qO- http://localhost:4xxx/healthz | grep -q ok` + `apk add curl wget postgresql-client` in `deploy/Dockerfile.base:3` + longer `start_period: 30s`.
-- Local Docker Desktop still runs alongside **chael SIEM** (E:\chael\docker-compose.yml) with no port conflicts (ScreenKonect uses 5432/6380/4000-4004/5173/5174/8080, chael uses 8000,8004,8001,3000,3001,5601,6379,9200,2055,8085,8091,9090).
-- Verified in Codespace: `curl http://localhost:8080` returns Vite HTML (`<!DOCTYPE html>`), gateway logs clean, migrate logs `migrations done`. Backends transition `unhealthy -> healthy` after 30-40s (was unhealthy due to missing migrate + fetch healthcheck).
+- Git remote is **private** `Micatob/screenkonect` `https://github.com/Micatob/screenkonect` branch `main` commits `d063e73` + `376dee8` + `82c4c2e` + `6922633` (latest: tailscale funnel docs + 8090). Pushed `be24380` session save before close.
+- **Single-port gateway** `deploy/Caddyfile` + `deploy/docker-compose.yaml:247` `gateway:8090` (was 8080, changed to 8090 to avoid chael 8080 conflict, `.env: SK_GATEWAY_PORT=8090`). Routes `/`→5173, `/join/*`→5174, `/v1/*`→4000-4004, `/ws`→4002. Verified `Invoke-WebRequest http://localhost:8090 =200` and `http://100.65.87.116:8090 =200`.
+- **Tailscale** installed `1.102.3` at `C:\Program Files\Tailscale\tailscale.exe`, `tailscale ip -4 = 100.65.87.116`, `status = desktop-a780de3 tobi53154@ green`. Funnel not yet enabled - needs one click `https://login.tailscale.com/f/funnel?node=npV6HLYRjb11CNTRL` then `tailscale funnel --bg 8090` -> public `https://desktop-a780de3.tailXXXX.ts.net`. Alternative private `tailscale serve --bg 8090`.
+- **DB auto-migrate** `db-migrate` service + `Dockerfile.base:3` `apk add curl wget postgresql-client`, healthchecks `wget -qO- ... | grep -q ok`, `start_period 30s`. Fixes previous `unhealthy` on Codespace.
+- **Docker closed** by user now - volumes `screenkonect_postgres_data` / `screenkonect_redis_data` persist (harmless warnings about not created by Compose). Next `up -d` will recreate gateway + auth/session/signaling (they were `Exited (137)` / `Created` after last hang, needs `up -d`).
+- **Codespaces** fallback still works but slow (10min first build) - recommend local+Tailscale for NG. `.devcontainer` still forwards 8090 public.
+- Docs updated `README.md:990` Tailscale Funnel + `HOW-IT-WORKS.md:143` single-port 8090, pushed `6922633`.
 
 ## Start / stop / check
 
