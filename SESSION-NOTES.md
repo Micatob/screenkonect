@@ -1,6 +1,6 @@
 # ScreenKonect — Session Handover Notes
 
-_Last updated: 2026-08-28 (session state saved by user request)_
+_Last updated: 2026-09-02 (session state saved by user request - single-port gateway + Codespaces)_
 
 ## Resume / How to pick this back up
 
@@ -30,31 +30,37 @@ session:
 - If env in `deploy/docker-compose.yaml` is ever changed, recreate with
   `up -d` (not `restart`) or new `VITE_*_TARGET` vars won't apply.
 
-## Current state (VERIFIED WORKING)
+## Current state (VERIFIED WORKING - 2026-09-02)
 
-- The full ScreenKonect stack runs in Docker Desktop alongside the user's
-  **chael SIEM** stack (E:\chael\docker-compose.yml) with **no port conflicts**.
-- 9 containers, project name `screenkonect`, containers named `screenkonect-*`:
-  postgres (5432), redis (6380), auth (4000), session (4001), signaling (4002),
-  audit (4003), device (4004), web-dashboard (5173), client-consent-ui (5174).
-- chael uses host ports 8000, 8004, 8001, 3000, 3001, 5601, 6379, 9200, 2055,
-  8085, 8091, 9090 — no overlap with ScreenKonect.
-- Verified end-to-end: all /healthz return 200, both web apps serve 200,
-  register → login → create-session smoke test passed through Docker.
-- Postgres data preserved (3 users, 5 sessions, 4 devices) — volumes migrated
-  from old `deploy_postgres_data` to `screenkonect_postgres_data`.
+- Git remote is now **private GitHub** `Micatob/screenkonect` (`https://github.com/Micatob/screenkonect`, branch `main`, commits `d063e73` + `376dee8` + `82c4c2e`). Local git user `Hermesfury <tobi53154@gmail.com>` token `gho_...fRi` (Micatob).
+- **Single-port gateway** added: `deploy/Caddyfile` + `deploy/docker-compose.yaml:247` `gateway:8080` (caddy:2-alpine) routes `/`→dashboard:5173, `/join/*`→consent-ui:5174, `/v1/auth`→auth:4000, `/v1/sessions`→session:4001, `/ws`→signaling:4002, `/v1/devices`→device:4004, `/v1/audit`→audit:4003. **Expose only 8080** instead of 7 ports.
+- **Codespaces** ready: `.devcontainer/devcontainer.json` forwards 8080 as `public`, auto `docker compose up -d --build`. 10 ports forwarded (8080 gateway + 5173/5174 + 4000-4004 + 5432/6380). Single public URL `https://xxx-8080.app.github.dev` serves both dashboard and join links (`services/session/src/routes/sessions.ts:101` uses `request.headers.host`).
+- **DB auto-migrate** added: `db-migrate` service (depends_on postgres healthy, `restart: no`) runs `npm run db:migrate -w @screenkonect/db`. Backends now depend_on `db-migrate: completed`. Healthchecks switched from `node -e fetch` to `wget -qO- http://localhost:4xxx/healthz | grep -q ok` + `apk add curl wget postgresql-client` in `deploy/Dockerfile.base:3` + longer `start_period: 30s`.
+- Local Docker Desktop still runs alongside **chael SIEM** (E:\chael\docker-compose.yml) with no port conflicts (ScreenKonect uses 5432/6380/4000-4004/5173/5174/8080, chael uses 8000,8004,8001,3000,3001,5601,6379,9200,2055,8085,8091,9090).
+- Verified in Codespace: `curl http://localhost:8080` returns Vite HTML (`<!DOCTYPE html>`), gateway logs clean, migrate logs `migrations done`. Backends transition `unhealthy -> healthy` after 30-40s (was unhealthy due to missing migrate + fetch healthcheck).
 
 ## Start / stop / check
 
+**Local (Docker Desktop):**
 ```powershell
 docker compose -f deploy/docker-compose.yaml up -d      # start (images cached)
-docker compose -f deploy/docker-compose.yaml ps          # status (healthy expected)
-curl http://localhost:4000/healthz                       # API health (4000-4004)
+docker compose -f deploy/docker-compose.yaml ps          # status (healthy expected, 10 containers + migrate done)
+curl http://localhost:8080 | head -n 5                    # gateway -> dashboard HTML
+curl http://localhost:4000/healthz                       # direct API health (4000-4004)
 docker compose -f deploy/docker-compose.yaml logs -f auth
 docker compose -f deploy/docker-compose.yaml down        # stop
 ```
 
-Port overrides (if ever needed): SK_*_PORT vars in root `.env` (see .env.example).
+**Codespaces (single-port public):**
+```bash
+git pull
+docker compose -f deploy/docker-compose.yaml up -d --build
+docker compose -f deploy/docker-compose.yaml ps          # wait 40s for healthy
+docker logs screenkonect-migrate --tail 20                # migrations done
+# PORTS tab -> 8080 -> Public -> https://xxx-8080.app.github.dev
+```
+
+Port overrides (if ever needed): SK_*_PORT vars in root `.env` (see .env.example). Gateway is `SK_GATEWAY_PORT=8080`.
 
 ## Bugs fixed in this session
 
@@ -101,6 +107,16 @@ Port overrides (if ever needed): SK_*_PORT vars in root `.env` (see .env.example
 - User runs hybrid mode historically (postgres/redis in Docker + `npm run dev`
   on host); full-Docker mode now also verified working.
 - user's request: if issues arise, resume from this file.
+
+## Session 2026-09-02 (single-port + Codespaces - YOU ARE HERE)
+
+- User is in **Nigeria**, no local public IP, no card for Oracle (`eu-frankfurt-1` requires card). Chose **GitHub Codespaces free** (`120 core-hours/mo`, `15GB`) as completely free public host instead of Oracle/VPS.
+- Created private GitHub repo `Micatob/screenkonect` via API (`POST /user/repos` private=true), pushed local `d063e73` (120 files) + `376dee8` (.devcontainer) + `82c4c2e` (fix). Remote `origin https://github.com/Micatob/screenkonect.git` branch `main`.
+- Added **gateway**: `deploy/Caddyfile` (handles `/ws`, `/v1/*` by prefix, `/join/*`→consent-ui, `/`→dashboard + Referer-based vite assets) + `deploy/docker-compose.yaml:247` `gateway:8080`. Reduces 7 public ports to 1.
+- Fixed **Codespace unhealthy backends** (`auth:4000` etc unhealthy, `curl http://localhost:8080` already OK): added `db-migrate` init container, `apk add curl wget postgresql-client` to `Dockerfile.base`, healthchecks `wget -qO- ... | grep -q ok`, `depends_on: db-migrate completed`, `start_period 30s`.
+- Codespace shows 10 forwarded ports (8080 public + others private) - expected from `.devcontainer/devcontainer.json:10`. Next step is `git pull` + `docker compose up -d --build` in Codespace to get `82c4c2e` and verify `healthy`.
+- How to go live tested: `PORTS 8080 Public` → `https://xxx-8080.app.github.dev` → login → New Session → `https://xxx-8080.app.github.dev/join/xxx?token=yyy` send to client. Client must Approve + toggle Remote Control ON for full control (consent enforced `services/session/src/routes/sessions.ts:99`, `docs/consent-and-permissions.md:39`).
+- Next: `docker compose -f deploy/docker-compose.yaml ps` should show healthy, then `POST /v1/auth/register` → login → create session smoke test through `8080`.
 
 ## Session 2026-08-28 (login + create-session fix)
 
