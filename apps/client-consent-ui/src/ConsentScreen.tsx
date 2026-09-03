@@ -9,23 +9,24 @@ interface ConsentScreenProps {
     clipboard: boolean;
     file_transfer: boolean;
     audio: boolean;
-  }) => void;
+  }, shareTarget: 'monitor' | 'window' | 'browser') => void;
   onReject: () => void;
 }
 
 export function ConsentScreen({ onApprove, onReject }: ConsentScreenProps) {
   const [permissions, setPermissions] = useState({
     view: true,
-    control: false,
-    clipboard: false,
-    file_transfer: false,
+    control: true,
+    clipboard: true,
+    file_transfer: true,
     audio: false,
   });
+  const [shareTarget, setShareTarget] = useState<'monitor' | 'window' | 'browser'>('monitor');
   const [approving, setApproving] = useState(false);
 
   const handleApprove = async () => {
     setApproving(true);
-    await onApprove(permissions);
+    await onApprove(permissions, shareTarget);
   };
 
   const togglePermission = (key: keyof typeof permissions) => {
@@ -116,6 +117,20 @@ export function ConsentScreen({ onApprove, onReject }: ConsentScreenProps) {
                 checked={permissions.audio}
                 onChange={() => togglePermission('audio')}
               />
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
+              <h4 className="font-medium text-blue-900 text-sm mb-2">What to share (avoids mirror loop):</h4>
+              <div className="grid grid-cols-3 gap-2">
+                {(['monitor','window','browser'] as const).map((t) => (
+                  <button key={t} onClick={() => setShareTarget(t)} className={`p-2 rounded border text-xs ${shareTarget===t?'bg-blue-600 text-white border-blue-600':'bg-white border-gray-200'}`}>
+                    {t==='monitor'?'Entire Screen':t==='window'?'Window':'Browser Tab'}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-blue-700 mt-2">
+                {shareTarget==='monitor'?'Shares whole desktop — minimizing browser will show desktop. Best for full help. If testing on same PC, use Window to avoid mirror.':'Shares only selected window/tab — minimizing will show black. Use Entire Screen for desktop.'}
+              </p>
             </div>
 
             <div className="bg-gray-50 rounded-lg p-4 mb-6">

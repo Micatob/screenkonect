@@ -27,27 +27,45 @@
 		reverse_proxy auth:4000
 	}
 
-	# 3. Client consent UI - join links
-	# e.g. /join/ABC123?token=xxx&session_id=yyy
+	# 3. Client consent UI - join links (sets cookie so nested Vite imports route correctly)
 	handle /join/* {
+		header Set-Cookie "sk_app=consent; Path=/; Max-Age=600; SameSite=Lax"
 		reverse_proxy client-consent-ui:5174
 	}
 	handle /join {
+		header Set-Cookie "sk_app=consent; Path=/; Max-Age=600; SameSite=Lax"
 		reverse_proxy client-consent-ui:5174
 	}
 
-	# 4. Vite dev assets for consent UI when loaded from /join page
-	# (Referer contains /join) -> route HMR/assets to consent-ui, not dashboard
-	@consentAssets {
+	# 4. Vite dev assets for consent UI
+	@consentAssetsReferer {
 		path /@vite/* /@fs/* /src/* /node_modules/* /assets/*
 		header Referer *join*
 	}
-	handle @consentAssets {
+	handle @consentAssetsReferer {
+		reverse_proxy client-consent-ui:5174
+	}
+	@consentAssetsCookie {
+		path /@vite/* /@fs/* /src/* /node_modules/* /assets/*
+		header Cookie *sk_app=consent*
+	}
+	handle @consentAssetsCookie {
 		reverse_proxy client-consent-ui:5174
 	}
 
-	# 5. Everything else -> technician dashboard
+	# 4b. Vite HMR websocket - must route to correct Vite instance (not signaling)
+	# HMR uses Upgrade: websocket + Sec-WebSocket-Protocol: vite-hmr, path is /?token=...
+	@hmrConsent {
+		header Upgrade websocket
+		header Cookie *sk_app=consent*
+	}
+	handle @hmrConsent {
+		reverse_proxy client-consent-ui:5174
+	}
+
+	# 5. Everything else -> technician dashboard (clears consent cookie so dashboard assets not misrouted)
 	handle {
+		header Set-Cookie "sk_app=dashboard; Path=/; Max-Age=600; SameSite=Lax"
 		reverse_proxy web-dashboard:5173
 	}
 

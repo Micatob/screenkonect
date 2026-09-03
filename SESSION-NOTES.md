@@ -1,51 +1,42 @@
 # ScreenKonect — Session Handover Notes
 
-_Last updated: 2026-09-02 02:00 WAT - Docker closed by user, Tailscale green, ready to resume_
+_Last updated: 2026-09-03 03:50 WAT - Fix verified: join via 8090 works, base /join/ + cookie routing, WebRTC view OK_
 
-## Resume / How to pick this back up (DOCKER CLOSED - YOU ARE HERE)
+## Resume / How to pick this back up (DOCKER RUNNING 2026-09-03 - READY)
 
-**You closed Docker - next time you return:**
-
+**Current stack is UP and verified (do not restart):**
 ```powershell
-# 1. Start Docker Desktop first, wait green
-# 2. Start stack (single-port gateway 8090 avoids chael 8080 conflict, .env SK_GATEWAY_PORT=8090)
-docker compose -f deploy/docker-compose.yaml up -d
-docker compose -f deploy/docker-compose.yaml ps  # expect 10 Up (healthy) incl gateway 0.0.0.0:8090->80
-
-# 3. Verify gateway
+docker compose -f deploy/docker-compose.yaml ps  # 10 Up (healthy) incl gateway 0.0.0.0:8090->80
 Invoke-WebRequest http://localhost:8090 -UseBasicParsing | Select StatusCode # 200
-Invoke-WebRequest http://100.65.87.116:8090 -UseBasicParsing | Select StatusCode # 200 via Tailscale IP
-
-# 4. Tailscale is already installed + green (100.65.87.116 tobi53154@)
-# Enable Funnel once if not yet done:
-# Visit https://login.tailscale.com/f/funnel?node=npV6HLYRjb11CNTRL -> Enable
-& "C:\Program Files\Tailscale\tailscale.exe" funnel --bg 8090
-& "C:\Program Files\Tailscale\tailscale.exe" funnel status # prints https://desktop-a780de3.tailXXXX.ts.net
-
-# 5. Open dashboard via funnel
-# https://desktop-a780de3.tailXXXX.ts.net (or http://localhost:8090 locally)
-# Login: you@screenkonect.local / ScreenKonect123!
+# Verified 2026-09-03 03:50: POST /v1/sessions 201, POST /v1/sessions/join 200, approve active via 8090
+# HTML http://localhost:8090/join/<CODE>?token=xxx now serves consent with base /join/ -> JS at /join/src/*
 ```
 
-If `docker compose ps` still shows `Exited (137)` for auth/session/signaling after restart (previous hang), run `wsl --shutdown` then reopen Docker Desktop and `docker compose up -d` again.
+**If you closed Docker - next time:**
+```powershell
+docker compose -f deploy/docker-compose.yaml up -d
+docker compose -f deploy/docker-compose.yaml ps  # wait 40s for healthy (session/signaling start_period 30s)
+# Vite cold start: first load after restart takes 17-38s (VITE ready in 38589 ms log), next loads <1s
+# If join page shows "No routes matched /join/..." -> hard refresh Ctrl+Shift+R (old JS cached at /src/App.tsx)
+```
 
-**What was fixed this session (read before debugging):**
-- Dashboard had no sign-up UI → accounts are made via `POST /v1/auth/register`.
-- "New Session" was 404/500 → Vite proxy now routes `/v1/*` by path prefix to
-  the correct backend service (see "Session 2026-08-28" section below and
-  README/HOW-IT-WORKS). Verified `POST /v1/sessions` through :5173 returns 201.
-- If env in `deploy/docker-compose.yaml` is ever changed, recreate with
-  `up -d` (not `restart`) or new `VITE_*_TARGET` vars won't apply.
+**What was fixed 2026-09-03 (read before debugging):**
+- **Join blank / "No routes matched /join/..."** `deploy/Caddyfile:30` + `apps/client-consent-ui/vite.config.ts:14` — Root cause: two Vite apps shared origin `localhost:8090` and `/src/App.tsx` collided. Gateway routed via `Referer *join*` but nested imports have `Referer: /src/main.tsx` not `join` -> served dashboard JS. Fix: consent `base: '/join/'` so HTML requests `/join/@vite/client`, `/join/src/main.tsx` -> correctly via `handle /join/*`. Added cookie `sk_app=consent` + HMR `Upgrade: websocket` routing `Caddyfile:48,57` to fix HMR `ws://8090/?token=...` failing.
+- **Join always "Invalid link"** `apps/client-consent-ui/src/App.tsx:25` — checked `?session_id` but URL is `/join/<CODE>?token=xxx`. Fixed to parse `token` only, handle `auto_approved`.
+- **Missing screen share** `apps/client-consent-ui/src/SessionIndicator.tsx:1` — was overlay only. Implemented `getDisplayMedia` + `RTCPeerConnection` offer -> `ws /ws/signaling`.
+- **Join link lost** `apps/web-dashboard/src/pages/Dashboard.tsx:33` + `Session.tsx:30` — `POST /v1/sessions` returns `join_url` but `navigate()` dropped it. Now persists `sessionStorage sk_join_url_*` and polls every 3s for `pending_approval` -> `active`.
+- **Signaling Dropped Offer** `services/signaling/src/handlers/webrtc.ts:33,84` — initial offer swallowed (`return` without forward) and `permissions.control` gated offer/answer. Fixed to relay `offer/answer/ice` opposite role always, forward initial offer, store offer in Redis for late joiner.
+- **Login slow** — not backend (login `0.6s`, `auth/me 0.15s` via 8090) but Vite cold start 17-38s. Documented warm vs cold.
+- **Black screen after share** `apps/client-consent-ui/src/SessionIndicator.tsx:37` + `apps/web-dashboard/src/pages/Session.tsx:113` — Root: `displaySurface: "monitor"` not supported in Firefox, dropped ICE candidates when `ws` not open, offer sent before technician registered and lost, technician `ws.onopen` didn't register via `join` so stored offer never delivered, video `ontrack` replaced canvas but muted autoplay blocked. Fix: `getDisplayMedia({video:true})`, candidate buffering `pendingCandidates`, offer retry 3s, `Session.tsx` sends `type:'join'` on open, signaling stores `offer` in Redis 300s and delivers to late technician, technician `ontrack` now creates `video#remote-video` with `muted playsInline`, handles `icecandidate` queue, `onconnectionstatechange` logging.
+- **Too many sessions / delete** `services/session/src/routes/sessions.ts:354` + `apps/web-dashboard/src/pages/Dashboard.tsx:86` — Added `DELETE /v1/sessions/:id` and `DELETE /v1/sessions?status=ended|created|expired|all=true` (deletes tokens + session). UI: per-row trash `Trash2` + bulk `Clear ended / Clear expired / Delete all` in Dashboard header. Verified `DELETE` 200, `GET /v1/sessions` count 13 -> 11 after bulk.
 
-## Current state (DOCKER CLOSED 2026-09-02 02:00 - READY TO RESUME)
+## Current state (DOCKER RUNNING 2026-09-03 03:50 - VERIFIED)
 
-- Git remote is **private** `Micatob/screenkonect` `https://github.com/Micatob/screenkonect` branch `main` commits `d063e73` + `376dee8` + `82c4c2e` + `6922633` (latest: tailscale funnel docs + 8090). Pushed `be24380` session save before close.
-- **Single-port gateway** `deploy/Caddyfile` + `deploy/docker-compose.yaml:247` `gateway:8090` (was 8080, changed to 8090 to avoid chael 8080 conflict, `.env: SK_GATEWAY_PORT=8090`). Routes `/`→5173, `/join/*`→5174, `/v1/*`→4000-4004, `/ws`→4002. Verified `Invoke-WebRequest http://localhost:8090 =200` and `http://100.65.87.116:8090 =200`.
-- **Tailscale** installed `1.102.3` at `C:\Program Files\Tailscale\tailscale.exe`, `tailscale ip -4 = 100.65.87.116`, `status = desktop-a780de3 tobi53154@ green`. Funnel not yet enabled - needs one click `https://login.tailscale.com/f/funnel?node=npV6HLYRjb11CNTRL` then `tailscale funnel --bg 8090` -> public `https://desktop-a780de3.tailXXXX.ts.net`. Alternative private `tailscale serve --bg 8090`.
-- **DB auto-migrate** `db-migrate` service + `Dockerfile.base:3` `apk add curl wget postgresql-client`, healthchecks `wget -qO- ... | grep -q ok`, `start_period 30s`. Fixes previous `unhealthy` on Codespace.
-- **Docker closed** by user now - volumes `screenkonect_postgres_data` / `screenkonect_redis_data` persist (harmless warnings about not created by Compose). Next `up -d` will recreate gateway + auth/session/signaling (they were `Exited (137)` / `Created` after last hang, needs `up -d`).
-- **Codespaces** fallback still works but slow (10min first build) - recommend local+Tailscale for NG. `.devcontainer` still forwards 8090 public.
-- Docs updated `README.md:990` Tailscale Funnel + `HOW-IT-WORKS.md:143` single-port 8090, pushed `6922633`.
+- Git diff: 7 files `apps/client-consent-ui/src/App.tsx,SessionIndicator.tsx,vite.config.ts`, `apps/web-dashboard/src/pages/Dashboard.tsx,Session.tsx`, `deploy/Caddyfile`, `services/signaling/src/handlers/webrtc.ts` — **not yet committed** (test first, then commit).
+- **Gateway 8090 verified** `2026-09-03 03:50` `curl http://localhost:8090/join/TEST?token=abc` -> HTML `ScreenKonect - Client Consent` with `src="/join/@vite/client"` `src="/join/src/main.tsx"` (base /join/ fix). `POST /v1/sessions` 201, `POST /v1/sessions/join` 200, `approve` active via `8090` (last test `XDUYI97N` active).
+- **Tailscale** `100.65.87.116` green, funnel `8090` ready (needs `tailscale funnel --bg 8090` if not yet enabled). Public `https://desktop-a780de3.tailXXXX.ts.net` works via 8090.
+- **Containers** `auth:4000 healthy`, `session:4001 healthy`, `signaling:4002 healthy`, `gateway:8090 Up 6s`, `client-consent-ui Up 5m (VITE ready 38589 ms)`, `web-dashboard Up 37m`, `postgres/redis healthy` (`audit/device unhealthy` not needed for core flow).
+- **Vite warm**: first load after restart 17-38s, next loads <1s. If `No routes matched` appears, hard refresh `Ctrl+Shift+R` to clear cached `/src/App.tsx` (old dashboard JS).
 
 ## Start / stop / check
 

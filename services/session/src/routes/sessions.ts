@@ -351,6 +351,84 @@ export async function sessionRoutes(app: FastifyInstance) {
     };
   });
 
+  // Delete a single session (only owner)
+  app.delete('/:id', { preHandler: [authenticate] }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const user = (request as any).user;
+
+    const session = await db.query.sessions.findFirst({
+      where: and(eq(sessions.id, id), eq(sessions.technician_id, user.sub)),
+    });
+
+    if (!session) {
+      return reply.status(404).send({ error: 'Session not found' });
+    }
+
+    // Delete related tokens first (cascade would also handle, but be explicit)
+    await db.delete(sessionTokens).where(eq(sessionTokens.session_id, id));
+    await db.delete(sessions).where(eq(sessions.id, id));
+
+    return { success: true, deleted_id: id };
+  });
+
+  // Bulk delete: delete by status or delete all for technician
+  // Query: ?status=ended,expired,created or ?all=true
+  // For safety, only allows deleting ended/expired or all with explicit confirm
+  app.delete('/', { preHandler: [authenticate] }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = (request as any).user;
+    const query = request.query as { status?: string; all?: string };
+
+    if (query.all === 'true') {
+      const toDelete = await db.query.sessions.findMany({
+        where: eq(sessions.technician_id, user.sub),
+        columns: { id: true },
+      });
+      const ids = toDelete.map((s) => s.id);
+      if (ids.length > 0) {
+        for (const sid of ids) {
+          await db.delete(sessionTokens).where(eq(sessionTokens.session_id, sid));
+        }
+        await db.delete(sessions).where(eq(sessions.technician_id, user.sub));
+      }
+      return { success: true, deleted_count: ids.length };
+    }
+
+    const status = query.status as string | undefined;
+    const allowedStatuses = ['ended', 'created', 'pending_approval', 'expired'];
+    if (!status || !allowedStatuses.includes(status)) {
+      return reply.status(400).send({ error: 'Provide ?status=ended|created|pending_approval|expired or ?all=true' });
+    }
+
+    // For expired: sessions where token expired or created_at old
+    if (status === 'expired') {
+      const expired = await db.query.sessions.findMany({
+        where: and(eq(sessions.technician_id, user.sub), eq(sessions.status, 'created')),
+      });
+      const cutoff = new Date(Date.now() - config.session_policy.consent_timeout_ms);
+      const expiredIds = expired.filter((s) => s.created_at && new Date(s.created_at) < cutoff).map((s) => s.id);
+      for (const sid of expiredIds) {
+        await db.delete(sessionTokens).where(eq(sessionTokens.session_id, sid));
+      }
+      if (expiredIds.length) {
+        // delete one by one to handle foreign keys
+        for (const sid of expiredIds) {
+          await db.delete(sessions).where(eq(sessions.id, sid));
+        }
+      }
+      return { success: true, deleted_count: expiredIds.length };
+    }
+
+    const toDelete = await db.query.sessions.findMany({
+      where: and(eq(sessions.technician_id, user.sub), eq(sessions.status, status)),
+      columns: { id: true },
+    });
+    for (const sid of toDelete.map((s) => s.id)) {
+      await db.delete(sessionTokens).where(eq(sessionTokens.session_id, sid));
+      await db.delete(sessions).where(eq(sessions.id, sid));
+    }
+    return { success: true, deleted_count: toDelete.length, status };
+  });
+
   // Get available devices for the technician
   app.get('/devices/available', { preHandler: [authenticate] }, async (request: FastifyRequest, reply: FastifyReply) => {
     const user = (request as any).user;

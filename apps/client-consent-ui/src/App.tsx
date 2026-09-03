@@ -21,14 +21,23 @@ export default function App() {
   const [state, setState] = useState<AppState>('loading');
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [shareTarget, setShareTarget] = useState<'monitor' | 'window' | 'browser'>('monitor');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
-    const sessionId = params.get('session_id');
+    // Join URL format is /join/<CODE>?token=xxx - code is in pathname, not query
+    // Keep backward compat: also accept ?session_id / ?code if present
+    const pathMatch = window.location.pathname.match(/\/join\/([^/?#]+)/);
+    const codeFromPath = pathMatch ? pathMatch[1] : null;
 
-    if (!token || !sessionId) {
-      setError('Invalid join link. Please request a new link from your support technician.');
+    if (!token) {
+      // No token -> invalid link regardless of path
+      setError(
+        codeFromPath
+          ? 'Invalid join link: missing token. Please request a new link from your support technician.'
+          : 'Invalid join link. Please request a new link from your support technician.'
+      );
       setState('error');
       return;
     }
@@ -53,7 +62,10 @@ export default function App() {
       const data = await res.json();
       setSession(data.session);
 
-      if (data.session.consent_state === 'approved') {
+      // Handle both manual consent and auto-approved (notification_only/admin_only) flows
+      if (data.session.status === 'active') {
+        setState('active');
+      } else if (data.session.consent_state === 'approved' || data.session.consent_state === 'auto_approved') {
         setState('active');
       } else if (data.session.status === 'ended') {
         setState('ended');
@@ -72,8 +84,9 @@ export default function App() {
     clipboard: boolean;
     file_transfer: boolean;
     audio: boolean;
-  }) => {
+  }, target: 'monitor' | 'window' | 'browser' = 'monitor') => {
     if (!session) return;
+    setShareTarget(target);
 
     try {
       const res = await fetch(`/v1/sessions/${session.id}/approve`, {
@@ -188,6 +201,7 @@ export default function App() {
       <SessionIndicator
         sessionId={session.id}
         permissions={session.permissions}
+        shareTarget={shareTarget}
         onEndSession={handleEndSession}
       />
     );

@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
-import { Monitor, Plus, LogOut, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Monitor, Plus, LogOut, Clock, CheckCircle, XCircle, AlertCircle, Trash2 } from 'lucide-react';
 import type { Session } from '@screenkonect/shared';
 
 export function Dashboard() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -43,11 +44,27 @@ export function Dashboard() {
         body: JSON.stringify({}),
       });
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create session');
+      }
       if (data.session) {
-        navigate(`/session/${data.session.id}`);
+        // Persist join link because GET /:id does not return token (security)
+        if (data.join_url) {
+          sessionStorage.setItem(`sk_join_url_${data.session.id}`, data.join_url);
+        }
+        if (data.join_token) {
+          sessionStorage.setItem(`sk_join_token_${data.session.id}`, data.join_token);
+        }
+        if (data.join_url) {
+          try {
+            await navigator.clipboard.writeText(data.join_url);
+          } catch {}
+        }
+        navigate(`/session/${data.session.id}`, { state: { join_url: data.join_url } });
       }
     } catch (err) {
       console.error('Failed to create session:', err);
+      alert(err instanceof Error ? err.message : 'Failed to create session');
     } finally {
       setCreating(false);
     }
@@ -63,6 +80,49 @@ export function Dashboard() {
         return <XCircle className="w-5 h-5 text-gray-400" />;
       default:
         return <Clock className="w-5 h-5 text-blue-500" />;
+    }
+  };
+
+  const deleteSession = async (id: string) => {
+    if (!confirm('Delete this session? This cannot be undone.')) return;
+    setDeleting(id);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/v1/sessions/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      sessionStorage.removeItem(`sk_join_url_${id}`);
+      sessionStorage.removeItem(`sk_join_token_${id}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const deleteBulk = async (mode: 'ended' | 'created' | 'expired' | 'all') => {
+    const msg =
+      mode === 'all'
+        ? 'Delete ALL your sessions? This cannot be undone.'
+        : `Delete all ${mode} sessions?`;
+    if (!confirm(msg)) return;
+    try {
+      const token = localStorage.getItem('token');
+      const qs = mode === 'all' ? '?all=true' : `?status=${mode}`;
+      const res = await fetch(`/v1/sessions${qs}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Bulk delete failed');
+      alert(`Deleted ${data.deleted_count || 0} sessions`);
+      fetchSessions();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Bulk delete failed');
     }
   };
 
@@ -106,14 +166,42 @@ export function Dashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold">Support Sessions</h2>
-          <button
-            onClick={createSession}
-            disabled={creating}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            <Plus className="w-5 h-5" />
-            {creating ? 'Creating...' : 'New Session'}
-          </button>
+          <div className="flex items-center gap-2">
+            {sessions.length > 0 && (
+              <div className="flex items-center gap-1 mr-2">
+                <button
+                  onClick={() => deleteBulk('ended')}
+                  className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                  title="Delete all ended sessions"
+                >
+                  Clear ended
+                </button>
+                <button
+                  onClick={() => deleteBulk('expired')}
+                  className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                  title="Delete expired waiting sessions"
+                >
+                  Clear expired
+                </button>
+                <button
+                  onClick={() => deleteBulk('all')}
+                  className="px-3 py-1.5 text-sm bg-red-50 text-red-600 rounded hover:bg-red-100"
+                  title="Delete all sessions"
+                >
+                  <Trash2 className="w-4 h-4 inline mr-1" />
+                  Delete all
+                </button>
+              </div>
+            )}
+            <button
+              onClick={createSession}
+              disabled={creating}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Plus className="w-5 h-5" />
+              {creating ? 'Creating...' : 'New Session'}
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -172,12 +260,20 @@ export function Dashboard() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(session.created_at).toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm flex items-center gap-3">
                       <button
                         onClick={() => navigate(`/session/${session.id}`)}
                         className="text-blue-600 hover:text-blue-800"
                       >
                         View
+                      </button>
+                      <button
+                        onClick={() => deleteSession(session.id)}
+                        disabled={deleting === session.id}
+                        className="text-gray-400 hover:text-red-600 disabled:opacity-50"
+                        title="Delete session"
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </td>
                   </tr>

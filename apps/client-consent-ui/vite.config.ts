@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
   const signalingTarget = process.env.VITE_SIGNALING_TARGET || env.VITE_SIGNALING_TARGET || 'ws://localhost:4002';
 
   return {
+    base: '/join/',
     plugins: [react()],
     server: {
       port: 5174,

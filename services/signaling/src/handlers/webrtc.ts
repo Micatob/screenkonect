@@ -31,12 +31,15 @@ export async function signalingHandler(
       }
 
       if (!sessionId) {
-        if (msg.type !== 'offer' && msg.type !== 'answer') {
+        // Allow 'join' as explicit registration (technician waits for offer)
+        const isJoin = (msg as any).type === 'join';
+        if (msg.type !== 'offer' && msg.type !== 'answer' && !isJoin) {
           return;
         }
 
+        const targetSessionId = (msg as any).session_id || sessionId;
         const session = await db.query.sessions.findFirst({
-          where: eq(sessions.id, msg.session_id),
+          where: eq(sessions.id, targetSessionId),
         });
 
         if (!session) {
@@ -49,8 +52,12 @@ export async function signalingHandler(
           return;
         }
 
-        sessionId = msg.session_id;
-        clientRole = msg.type === 'offer' ? 'client' : 'technician';
+        sessionId = targetSessionId;
+        if (isJoin) {
+          clientRole = (msg as any).role === 'client' ? 'client' : 'technician';
+        } else {
+          clientRole = msg.type === 'offer' ? 'client' : 'technician';
+        }
 
         const clientId = `${sessionId}:${clientRole}:${Date.now()}`;
         clients.set(clientId, { ws, sessionId, role: clientRole });
@@ -63,6 +70,43 @@ export async function signalingHandler(
           `session:${sessionId}:presence`,
           JSON.stringify({ role: clientRole, action: 'joined' })
         );
+
+        // Also relay the initial offer/answer to the opposite peer if already connected.
+        // Without this, the first offer is swallowed and the technician never receives it.
+        // Store offer if no peer yet, so late joiner can get it.
+        const isJoinForForward = (msg as any).type === 'join';
+        if (!isJoinForForward) {
+          if (msg.type === 'offer') {
+            await redis.setex(`signaling:offer:${sessionId}`, 300, JSON.stringify(msg));
+          }
+          {
+            const targetRole = clientRole === 'client' ? 'technician' : 'client';
+            const sessionClients = await redis.smembers(`${SESSION_PREFIX}${sessionId}`);
+            let forwarded = false;
+            for (const otherId of sessionClients) {
+              const client = clients.get(otherId);
+              if (client && client.role === targetRole && client.ws.readyState === WebSocket.OPEN) {
+                client.ws.send(JSON.stringify(msg));
+                forwarded = true;
+              }
+            }
+            // If offer had no peer to forward to, it stays in Redis for late joiner
+            if (msg.type === 'offer' && !forwarded) {
+              console.log(`[signaling] stored offer for ${sessionId}, no ${targetRole} yet`);
+            }
+          }
+        }
+
+        // If this is a technician joining and there's a pending offer from client, deliver it now
+        if (clientRole === 'technician') {
+          const pendingOffer = await redis.get(`signaling:offer:${sessionId}`);
+          if (pendingOffer) {
+            try {
+              ws.send(pendingOffer);
+              console.log(`[signaling] delivered pending offer to technician ${sessionId}`);
+            } catch {}
+          }
+        }
 
         return;
       }
@@ -81,36 +125,19 @@ export async function signalingHandler(
         return;
       }
 
-      if (clientRole === 'client' && !session.permissions?.control) {
-        if (msg.type === 'answer' || msg.type === 'ice-candidate') {
-          const sessionClients = await redis.smembers(`${SESSION_PREFIX}${sessionId}`);
-          for (const clientId of sessionClients) {
-            const client = clients.get(clientId);
-            if (client && client.role === 'technician' && client.ws.readyState === WebSocket.OPEN) {
-              client.ws.send(JSON.stringify(msg));
-            }
+      // Relay WebRTC signaling between opposite roles.
+      // Permissions.control only gates data-channel input events, NOT offer/answer/ice.
+      const isSignaling = msg.type === 'offer' || msg.type === 'answer' || msg.type === 'ice-candidate';
+      if (isSignaling) {
+        const targetRole = clientRole === 'client' ? 'technician' : 'client';
+        const sessionClients = await redis.smembers(`${SESSION_PREFIX}${sessionId}`);
+        for (const clientId of sessionClients) {
+          const client = clients.get(clientId);
+          if (client && client.role === targetRole && client.ws.readyState === WebSocket.OPEN) {
+            client.ws.send(JSON.stringify(msg));
           }
         }
-      }
-
-      if (clientRole === 'technician') {
-        if (msg.type === 'offer') {
-          const sessionClients = await redis.smembers(`${SESSION_PREFIX}${sessionId}`);
-          for (const clientId of sessionClients) {
-            const client = clients.get(clientId);
-            if (client && client.role === 'client' && client.ws.readyState === WebSocket.OPEN) {
-              client.ws.send(JSON.stringify(msg));
-            }
-          }
-        } else if (msg.type === 'ice-candidate') {
-          const sessionClients = await redis.smembers(`${SESSION_PREFIX}${sessionId}`);
-          for (const clientId of sessionClients) {
-            const client = clients.get(clientId);
-            if (client && client.role === 'client' && client.ws.readyState === WebSocket.OPEN) {
-              client.ws.send(JSON.stringify(msg));
-            }
-          }
-        }
+        return;
       }
 
       if (msg.type === 'consent-update' || msg.type === 'permission-update' || msg.type === 'session-end') {
