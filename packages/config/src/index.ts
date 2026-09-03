@@ -63,6 +63,7 @@ const AppConfigSchema = z.object({
   host: z.string().default('0.0.0.0'),
   database_url: z.string().url(),
   redis_url: z.string().url().default('redis://localhost:6379'),
+  public_url: z.string().url().optional(),
   session_policy: SessionPolicySchema.default({}),
   security: SecurityConfigSchema,
   observability: ObservabilityConfigSchema.default({}),
@@ -96,6 +97,7 @@ export function loadConfig(configDir?: string): AppConfig {
     observability: { ...(defaultConfig.observability as Record<string, unknown>), ...observabilityConfig },
     database_url: process.env.DATABASE_URL || defaultConfig.database_url,
     redis_url: process.env.REDIS_URL || defaultConfig.redis_url,
+    public_url: process.env.PUBLIC_URL || (defaultConfig as any).public_url,
     security: {
       ...(defaultConfig.security as Record<string, unknown>),
       ...securityConfig,

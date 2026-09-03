@@ -96,9 +96,14 @@ export async function sessionRoutes(app: FastifyInstance) {
       expires_at: expiresAt,
     });
 
+    // Use PUBLIC_URL if set (tailscale funnel https://xxx.ts.net), else use request host
+    // This fixes localhost:8090 generating localhost links when technician is local but friend needs public
+    const publicBase = (config as any).public_url || process.env.PUBLIC_URL;
     const joinUrl = body.device_id
       ? `screenkonect://join?session=${sessionCode}&token=${clientToken}`
-      : `${request.protocol}://${request.headers.host}/join/${sessionCode}?token=${clientToken}`;
+      : publicBase
+        ? `${publicBase.replace(/\/$/, '')}/join/${sessionCode}?token=${clientToken}`
+        : `${request.protocol}://${request.headers.host}/join/${sessionCode}?token=${clientToken}`;
 
     return reply.status(201).send({
       session,
