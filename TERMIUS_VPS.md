@@ -34,9 +34,9 @@ SK_REDIS_PORT=6380
 LOG_LEVEL=info
 EOF
 
-# 5. Start (single-port gateway, 10 containers)
+# 5. Start (single-port gateway, 8 containers - audit/device removed for VPS)
 docker compose -f deploy/docker-compose.yaml up -d --build
-docker compose -f deploy/docker-compose.yaml ps   # wait 40s for healthy
+docker compose -f deploy/docker-compose.yaml ps   # wait 40s for healthy (auth,session,signaling,postgres,redis,gateway + 2 vite)
 docker compose -f deploy/docker-compose.yaml logs -f gateway  # Ctrl+C after 200
 
 # 6. Test

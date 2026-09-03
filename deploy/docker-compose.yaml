@@ -1,5 +1,7 @@
 name: screenkonect
 
+# Load .env from project root (one level up from deploy/)
+# Ensures PUBLIC_URL etc. are read both locally and on VPS /opt/screenkonect
 services:
   postgres:
     image: postgres:16-alpine
@@ -93,6 +95,8 @@ services:
     command: npm run dev -w services/session
     ports:
       - "${SK_SESSION_PORT:-4001}:4001"
+    env_file:
+      - ../.env
     environment:
       PORT: 4001
       DATABASE_URL: postgresql://screenkonect:screenkonect@postgres:5432/screenkonect
@@ -153,74 +157,6 @@ services:
       retries: 10
       start_period: 30s
 
-  audit:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.base
-    container_name: screenkonect-audit
-    working_dir: /app
-    command: npm run dev -w services/audit
-    ports:
-      - "${SK_AUDIT_PORT:-4003}:4003"
-    environment:
-      PORT: 4003
-      DATABASE_URL: postgresql://screenkonect:screenkonect@postgres:5432/screenkonect
-      REDIS_URL: redis://redis:6379
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-in-production-min-32-chars}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-in-production-min-32-chars}
-      NODE_ENV: development
-    volumes:
-      - ..:/app
-      - /app/node_modules
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      db-migrate:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:4003/healthz | grep -q ok || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-
-  device:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.base
-    container_name: screenkonect-device
-    working_dir: /app
-    command: npm run dev -w services/device
-    ports:
-      - "${SK_DEVICE_PORT:-4004}:4004"
-    environment:
-      PORT: 4004
-      DATABASE_URL: postgresql://screenkonect:screenkonect@postgres:5432/screenkonect
-      REDIS_URL: redis://redis:6379
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-in-production-min-32-chars}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-in-production-min-32-chars}
-      NODE_ENV: development
-    volumes:
-      - ..:/app
-      - /app/node_modules
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      db-migrate:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:4004/healthz | grep -q ok || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-
   web-dashboard:
     build:
       context: ..
@@ -234,8 +170,6 @@ services:
       VITE_API_TARGET: http://auth:4000
       VITE_AUTH_TARGET: http://auth:4000
       VITE_SESSION_TARGET: http://session:4001
-      VITE_DEVICE_TARGET: http://device:4004
-      VITE_AUDIT_TARGET: http://audit:4003
       VITE_SIGNALING_TARGET: ws://signaling:4002
       NODE_ENV: development
     volumes:
@@ -260,8 +194,6 @@ services:
       VITE_API_TARGET: http://auth:4000
       VITE_AUTH_TARGET: http://auth:4000
       VITE_SESSION_TARGET: http://session:4001
-      VITE_DEVICE_TARGET: http://device:4004
-      VITE_AUDIT_TARGET: http://audit:4003
       VITE_SIGNALING_TARGET: ws://signaling:4002
       NODE_ENV: development
     volumes:
