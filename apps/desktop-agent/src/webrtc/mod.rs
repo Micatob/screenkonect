@@ -9,21 +9,27 @@ use tracing::{info, warn};
 
 pub struct WebRtcPeer {
     config: Config,
+    session_id: String,
     signaling: SignalingClient,
 }
 
 impl WebRtcPeer {
-    pub async fn new(config: &Config, signaling: SignalingClient) -> Result<Self> {
+    pub async fn new(
+        config: &Config,
+        signaling: SignalingClient,
+        session_id: String,
+    ) -> Result<Self> {
         info!("Initializing WebRTC peer");
 
         Ok(WebRtcPeer {
             config: config.clone(),
+            session_id,
             signaling,
         })
     }
 
     pub async fn run(
-        &self,
+        mut self,
         capture: ScreenCapture,
         input: InputHandler,
     ) -> Result<()> {
@@ -34,11 +40,11 @@ impl WebRtcPeer {
         // Create and send offer
         let offer = peer.create_offer().await?;
         self.signaling
-            .send_offer(&self.config.token, &offer)
+            .send_offer(&self.session_id, &offer)
             .await?;
 
         // Process signaling messages
-        let mut signaling = self.signaling;
+        let signaling = &mut self.signaling;
         let capture = std::sync::Arc::new(capture);
         let input = std::sync::Arc::new(input);
 

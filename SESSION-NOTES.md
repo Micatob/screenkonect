@@ -107,6 +107,13 @@ Port overrides (if ever needed): SK_*_PORT vars in root `.env` (see .env.example
   on host); full-Docker mode now also verified working.
 - user's request: if issues arise, resume from this file.
 
+## Session 2026-09-04e - agent join protocol fixed + agent-v0.1.0 tagged (CI BUILDING EXE)
+
+- Repo confirmed PUBLIC - VPS can curl release assets, no auth. No manual SFTP needed.
+- Agent join protocol fixed: `consent.rs` now POSTs `/v1/sessions/join` (gets real uuid) then polls consent-state up to 30min; `signaling.rs` join sends real session_id (was secret token) + wss kept; `webrtc/mod.rs` carries session_id, `run(mut self)` fixes move-out-of-borrow compile error; `main.rs` wires session_id through.
+- NOT compile-verified (no Rust toolchain on this PC) - CI `agent-release.yaml` on tag is the first real build. If red, paste the error and fix next.
+- Tag `agent-v0.1.0` pushed -> Release exe -> VPS curls it into `deploy/downloads/`.
+
 ## Session 2026-09-04d - direct /downloads exe from VPS (PUSHED, EXE PLACEMENT PENDING)
 
 - Download button pointed at GitHub /releases (empty + private = clients hit login wall). Fixed: gateway serves `deploy/downloads/` at `/downloads/*` (`Caddyfile`, compose mount `./downloads:/srv/downloads:ro`), button now `href="/downloads/screenkonect-agent.exe"` + SmartScreen note.

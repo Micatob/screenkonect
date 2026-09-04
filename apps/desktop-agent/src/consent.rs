@@ -6,13 +6,6 @@ use std::time::Duration;
 use tracing::{info, warn};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ConsentState {
-    pub session_id: String,
-    pub consent_state: String,
-    pub permissions: ConsentPermissions,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct ConsentPermissions {
     pub view: bool,
     pub control: bool,
@@ -21,40 +14,88 @@ pub struct ConsentPermissions {
     pub audio: bool,
 }
 
-pub async fn wait_for_consent(config: &Config) -> Result<()> {
-    info!("Waiting for client consent...");
+#[derive(Debug, Deserialize)]
+struct JoinSession {
+    id: String,
+}
 
+#[derive(Debug, Deserialize)]
+struct JoinResponse {
+    session: JoinSession,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConsentStateResponse {
+    consent_state: String,
+}
+
+fn platform() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "windows"
+    }
+    #[cfg(target_os = "macos")]
+    {
+        "macos"
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        "linux"
+    }
+}
+
+/// Join the session with our token (like the browser client does), then wait
+/// for the client/technician to approve. Returns the real session id on success.
+pub async fn wait_for_consent(config: &Config) -> Result<String> {
+    info!("Joining session...");
+
+    let base = config.url.trim_end_matches('/');
     let client = Client::new();
-    let session_code = extract_session_code(&config.url)?;
 
-    let poll_url = format!(
-        "{}/v1/sessions/{}/consent-state",
-        config.url, session_code
-    );
+    // Step 1: join - validates the token and gives us the session id.
+    // (Polling consent-state with the short session CODE never matches:
+    // the server looks sessions up by uuid.)
+    let join_url = format!("{}/v1/sessions/join", base);
+    let join_res = client
+        .post(&join_url)
+        .json(&serde_json::json!({ "token": config.token, "platform": platform() }))
+        .send()
+        .await?;
+    if !join_res.status().is_success() {
+        return Err(AgentError::Consent(format!(
+            "join rejected ({}). The link is invalid, expired, or the session ended - ask the technician for a NEW link.",
+            join_res.status()
+        )));
+    }
+    let joined: JoinResponse = join_res.json().await?;
+    let session_id = joined.session.id;
+    info!("Joined session {}, waiting for approval...", session_id);
 
-    let max_retries = 60;
+    // Step 2: poll until approved / denied / timeout (30 min max).
+    let poll_url = format!("{}/v1/sessions/{}/consent-state", base, session_id);
+    let max_retries = 900;
     let poll_interval = Duration::from_secs(2);
 
     for attempt in 0..max_retries {
         match client.get(&poll_url).send().await {
             Ok(response) => {
                 if response.status().is_success() {
-                    match response.json::<ConsentState>().await {
+                    match response.json::<ConsentStateResponse>().await {
                         Ok(state) => {
                             match state.consent_state.as_str() {
                                 "approved" | "auto_approved" => {
-                                    info!("Consent approved for session {}", state.session_id);
-                                    return Ok(());
+                                    info!("Session {} approved", session_id);
+                                    return Ok(session_id);
                                 }
-                                "rejected" => {
+                                "denied" | "rejected" | "revoked" => {
                                     return Err(AgentError::Consent(
-                                        "Client rejected the connection".to_string(),
+                                        "The session was denied or ended".to_string(),
                                     ));
                                 }
-                                "pending" | "none" => {
-                                    if attempt % 5 == 0 {
+                                "pending" => {
+                                    if attempt % 15 == 0 {
                                         info!(
-                                            "Still waiting for consent... (attempt {}/{})",
+                                            "Still waiting for approval... ({}/{})",
                                             attempt + 1,
                                             max_retries
                                         );
@@ -70,7 +111,9 @@ pub async fn wait_for_consent(config: &Config) -> Result<()> {
                         }
                     }
                 } else if response.status() == 404 {
-                    warn!("Session not found, waiting for session to be created...");
+                    return Err(AgentError::Consent(
+                        "Session no longer exists on the server".to_string(),
+                    ));
                 } else {
                     warn!("Server returned status: {}", response.status());
                 }
@@ -84,25 +127,6 @@ pub async fn wait_for_consent(config: &Config) -> Result<()> {
     }
 
     Err(AgentError::Consent(
-        "Timed out waiting for consent".to_string(),
-    ))
-}
-
-fn extract_session_code(url: &str) -> Result<String> {
-    // Extract session code from URL like screenkonect://join?session=ABC123&token=xyz
-    // or from direct session code
-    if let Some(pos) = url.find("session=") {
-        let start = pos + 8;
-        let end = url[start..].find('&').map(|e| start + e).unwrap_or(url.len());
-        return Ok(url[start..end].to_string());
-    }
-
-    // If it's just a session code
-    if url.len() <= 20 && url.chars().all(|c| c.is_alphanumeric()) {
-        return Ok(url.to_string());
-    }
-
-    Err(AgentError::Config(
-        "Could not extract session code from URL".to_string(),
+        "Timed out waiting for approval".to_string(),
     ))
 }

@@ -21,7 +21,7 @@ pub struct SignalingClient {
 }
 
 impl SignalingClient {
-    pub async fn connect(config: &Config) -> Result<Self> {
+    pub async fn connect(config: &Config, session_id: &str) -> Result<Self> {
         info!("Connecting to signaling server: {}", config.url);
 
         // https servers need wss, plain http uses ws
@@ -41,10 +41,10 @@ impl SignalingClient {
         let (tx, mut internal_rx) = mpsc::channel(100);
         let (internal_tx, rx) = mpsc::channel(100);
 
-        // Send join message
+        // Send join message (server routes by real session id, not the secret token)
         let join_msg = serde_json::json!({
             "type": "join",
-            "session_id": config.token,
+            "session_id": session_id,
             "role": "agent"
         });
 
