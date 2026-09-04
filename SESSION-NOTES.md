@@ -107,14 +107,18 @@ Port overrides (if ever needed): SK_*_PORT vars in root `.env` (see .env.example
   on host); full-Docker mode now also verified working.
 - user's request: if issues arise, resume from this file.
 
-## Session 2026-09-04b - rejoin + insecure-http share fix (UNPUSHED)
+## Session 2026-09-04b - rejoin + insecure-http share fix (PUSHED 7d2bad4, VPS TEST PENDING)
+
+- PC pushed `7d2bad4` to `Micatob/screenkonect main` (10 files). `.env` + backup json NOT committed.
+- User reports Termius health `4000/4001 ok` after pull plan. Next on VPS: `git pull` (must show 7d2bad4), rebuild shared/config dist, `up -d --force-recreate auth session signaling web-dashboard client-consent-ui gateway`, hard refresh, re-login (45min JWT), NEW session link. Old links dead.
+- Open: user testing now, domain+https question asked (needs A record + Caddy domain block + PUBLIC_URL https). Awaiting test result.
 
 - Join `Invalid or expired` on refresh: `services/session/src/routes/sessions.ts:196` removed `used=false` filter, only mark used first time, allow rejoin within 45min expiry. `one_time_link_usage true->false` in `packages/config/src/index.ts` + `config/default.yaml`. Old links in DB still 5min/used - must create NEW session after deploy.
 - `Screen sharing not supported`: root cause is insecure context - `http://168.222.97.214:8090` exposes no `navigator.mediaDevices`. `SessionIndicator.tsx` now shows actionable fix (SSH tunnel localhost:8090 / chrome flag / domain https) instead of generic error.
 - Slim popup not showing = old JS: VPS never pulled or Vite cached. Verify with `grep Optional ConsentScreen.tsx` + hard refresh Ctrl+Shift+R + `--force-recreate client-consent-ui`.
 - session typecheck OK, config OK, consent only pre-existing controlChannel unused.
 
-## Session 2026-09-04 - 45min timeout + slim consent popup (UNPUSHED)
+## Session 2026-09-04 - 45min timeout + slim consent popup (PUSHED in 7d2bad4)
 
 - Timeout fix (Invalid/expired + Connection error): `packages/shared/src/utils/token.ts` `15m->45m` (JWT_ACCESS_EXPIRY env), `packages/config/src/index.ts` + `config/default.yaml` `token_expiry_ms 900000->2700000`, `consent_timeout_ms 300000(5min)->2700000(45min)` max `->7200000`, `idle_timeout_minutes 15->40`. Join links + access tokens now last 40min+.
 - Dashboard no longer dies at 15min: `apps/web-dashboard/src/App.tsx` stores `refresh_token`, `refreshAccessToken()` + `authFetch()` retry once on 401, auto-refresh every 40min, `safeJson()` avoids `JSON.parse: unexpected end` on 502. `Dashboard.tsx` + `Session.tsx` use `authFetch`.

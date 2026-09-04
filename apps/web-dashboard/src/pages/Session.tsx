@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { authFetch } from '../App';
+import { authFetch, copyTextWithFallback } from '../App';
 import { Monitor, Copy, CheckCircle, XCircle, AlertCircle, Clock, ArrowLeft } from 'lucide-react';
 import type { Session } from '@screenkonect/shared';
 
@@ -311,12 +311,17 @@ export function Session() {
     }
   };
 
-  const copyJoinUrl = () => {
-    if (joinUrl) {
-      navigator.clipboard.writeText(joinUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  const copyJoinUrl = async () => {
+    if (!joinUrl) return;
+    const ok = await copyTextWithFallback(joinUrl);
+    setCopied(ok);
+    if (!ok) {
+      // Fallback: select the visible input so user can copy manually
+      const el = document.getElementById('join-url-input') as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
     }
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const endSession = async () => {
@@ -425,7 +430,14 @@ export function Session() {
               </p>
               {joinUrl && (
                 <div className="bg-gray-900 rounded p-3 mb-4">
-                  <code className="text-sm text-green-400 break-all">{joinUrl}</code>
+                  <input
+                    id="join-url-input"
+                    readOnly
+                    value={joinUrl}
+                    onFocus={(e) => e.target.select()}
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                    className="w-full bg-transparent text-sm text-green-400 break-all outline-none"
+                  />
                 </div>
               )}
               <button
@@ -434,6 +446,9 @@ export function Session() {
               >
                 {copied ? 'Copied!' : 'Copy join link'}
               </button>
+              {!copied && joinUrl && (
+                <p className="text-xs text-gray-500 mt-2">If auto-copy is blocked, tap the link above to select and copy manually.</p>
+              )}
             </div>
           </div>
         )}
@@ -506,7 +521,7 @@ export function Session() {
                   <h4 className="text-white text-sm font-medium mb-2">Remote Control</h4>
                   <p className="text-xs text-gray-400 mb-2">Click/drag on video to control. Keyboard when video focused. Requires client enabled control.</p>
                   <div className="text-xs text-yellow-300 bg-yellow-900/20 rounded p-2">
-                    Browser tab control only. For full desktop, client must run desktop agent (`cargo run -p screenkonect-agent`).
+                    Browser control is page-level only - browsers block OS-desktop control for security, no workaround without client action. For full desktop the client must run the desktop agent (one click, no tech skills once packaged).
                   </div>
                 </div>
               )}

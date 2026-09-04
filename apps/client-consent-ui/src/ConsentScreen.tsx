@@ -25,10 +25,27 @@ export function ConsentScreen({ onApprove, onReject }: ConsentScreenProps) {
   });
   const [shareTarget, setShareTarget] = useState<'monitor' | 'window' | 'browser'>('monitor');
   const [approving, setApproving] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const busy = approving || rejecting;
 
   const handleApprove = async () => {
+    if (busy) return;
     setApproving(true);
-    await onApprove({ ...permissions, view: true, control: true, clipboard: true, file_transfer: true }, shareTarget);
+    try {
+      await onApprove({ ...permissions, view: true, control: true, clipboard: true, file_transfer: true }, shareTarget);
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (busy) return;
+    setRejecting(true);
+    try {
+      await onReject();
+    } finally {
+      setRejecting(false);
+    }
   };
 
   const togglePermission = (key: keyof typeof permissions) => {
@@ -89,14 +106,17 @@ export function ConsentScreen({ onApprove, onReject }: ConsentScreenProps) {
 
             <div className="flex gap-3">
               <button
-                onClick={onReject}
-                className="flex-1 py-3 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 transition-colors"
+                type="button"
+                onClick={handleReject}
+                disabled={busy}
+                className="flex-1 py-3 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 disabled:opacity-50 transition-colors"
               >
-                Deny
+                {rejecting ? 'Denying...' : 'Deny'}
               </button>
               <button
+                type="button"
                 onClick={handleApprove}
-                disabled={approving}
+                disabled={busy}
                 className="flex-1 py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
                 {approving ? 'Approving...' : 'Approve'}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, authFetch } from '../App';
+import { useAuth, authFetch, copyTextWithFallback } from '../App';
 import { Monitor, Plus, LogOut, Clock, CheckCircle, XCircle, AlertCircle, Trash2 } from 'lucide-react';
 import type { Session } from '@screenkonect/shared';
 
@@ -53,9 +53,8 @@ export function Dashboard() {
           sessionStorage.setItem(`sk_join_token_${data.session.id}`, data.join_token);
         }
         if (data.join_url) {
-          try {
-            await navigator.clipboard.writeText(data.join_url);
-          } catch {}
+          const ok = await copyTextWithFallback(data.join_url);
+          if (!ok) alert('Copy blocked by browser - long-press/select the link on the session page to copy manually.');
         }
         navigate(`/session/${data.session.id}`, { state: { join_url: data.join_url } });
       }

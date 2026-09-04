@@ -111,15 +111,21 @@ export default function App() {
     if (!session) return;
 
     try {
-      await fetch(`/v1/sessions/${session.id}/reject`, {
+      const res = await fetch(`/v1/sessions/${session.id}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: 'User declined' }),
       });
 
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as any).error || 'Failed to deny session - please close this window instead (session stays pending).');
+      }
+
       setState('ended');
     } catch (err) {
-      console.error('Failed to reject session:', err);
+      setError(err instanceof Error ? err.message : 'Failed to deny session');
+      setState('error');
     }
   };
 

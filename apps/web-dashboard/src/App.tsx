@@ -58,6 +58,31 @@ export async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
+// Clipboard on plain http://IP is blocked (needs secure context) - fallback to textarea+execCommand
+export async function copyTextWithFallback(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { (ta as any).setSelectionRange?.(0, ta.value.length); } catch {}
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function authFetch(input: RequestInfo, init: RequestInit = {}, retry = true): Promise<Response> {
   const token = localStorage.getItem('token');
   const res = await fetch(input, {
