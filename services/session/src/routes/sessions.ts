@@ -193,17 +193,28 @@ export async function sessionRoutes(app: FastifyInstance) {
     const body = JoinSessionSchema.parse(request.body);
 
     const tokenHash = hashToken(body.token);
+    // Allow rejoin within expiry (refresh/retry shouldn't kill 40min session).
+    // One-time enforcement is opt-in via session_policy.one_time_link_usage.
     const sessionToken = await db.query.sessionTokens.findFirst({
       where: and(
         eq(sessionTokens.token_hash, tokenHash),
         eq(sessionTokens.token_type, 'client_join'),
-        eq(sessionTokens.used, false),
         gt(sessionTokens.expires_at, new Date())
       ),
     });
 
     if (!sessionToken) {
-      return reply.status(401).send({ error: 'Invalid or expired token' });
+      return reply.status(401).send({ error: 'Invalid or expired token. Create a NEW session link - old links expire after 45min and refresh needs a fresh link if rejoin fails.' });
+    }
+    if (sessionToken.used && config.session_policy.one_time_link_usage) {
+      // Still allow same client to re-poll within active window; only block
+      // brand-new joins after use when strict one-time mode is on.
+      const existing = await db.query.sessions.findFirst({
+        where: eq(sessions.id, sessionToken.session_id),
+      });
+      if (!existing || existing.status === 'ended') {
+        return reply.status(401).send({ error: 'Invalid or expired token. Create a NEW session link.' });
+      }
     }
 
     const session = await db.query.sessions.findFirst({
@@ -218,11 +229,13 @@ export async function sessionRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Session has ended' });
     }
 
-    // Mark token as used
-    await db
-      .update(sessionTokens)
-      .set({ used: true, used_at: new Date() })
-      .where(eq(sessionTokens.id, sessionToken.id));
+    // Mark token as used only on first use (allows refresh/rejoin within 45min)
+    if (!sessionToken.used) {
+      await db
+        .update(sessionTokens)
+        .set({ used: true, used_at: new Date() })
+        .where(eq(sessionTokens.id, sessionToken.id));
+    }
 
     // Update session with client info
     const updateData: Record<string, unknown> = {

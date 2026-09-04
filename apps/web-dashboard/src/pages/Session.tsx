@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../App';
+import { authFetch } from '../App';
 import { Monitor, Copy, CheckCircle, XCircle, AlertCircle, Clock, ArrowLeft } from 'lucide-react';
 import type { Session } from '@screenkonect/shared';
 
@@ -8,7 +8,6 @@ export function Session() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation() as { state?: { join_url?: string } };
-  const { token } = useAuth();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -42,10 +41,9 @@ export function Session() {
 
   const fetchSession = async () => {
     try {
-      const res = await fetch(`/v1/sessions/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
+      const res = await authFetch(`/v1/sessions/${id}`);
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
       if (!res.ok) throw new Error(data.error || 'Failed to fetch session');
       setSession(data.session);
 
@@ -325,9 +323,8 @@ export function Session() {
     if (!confirm('Are you sure you want to end this session?')) return;
 
     try {
-      await fetch(`/v1/sessions/${id}/end`, {
+      await authFetch(`/v1/sessions/${id}/end`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
       });
       navigate('/');
     } catch (err) {

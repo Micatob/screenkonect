@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, Eye, MousePointer, Clipboard, FileUp, Volume2 } from 'lucide-react';
+import { Shield, Volume2 } from 'lucide-react';
 
 interface ConsentScreenProps {
   sessionId: string;
@@ -14,6 +14,8 @@ interface ConsentScreenProps {
 }
 
 export function ConsentScreen({ onApprove, onReject }: ConsentScreenProps) {
+  // Default-enabled permissions stay functional but hidden to keep popup short.
+  // Only opt-in toggles (audio) are shown.
   const [permissions, setPermissions] = useState({
     view: true,
     control: true,
@@ -26,11 +28,11 @@ export function ConsentScreen({ onApprove, onReject }: ConsentScreenProps) {
 
   const handleApprove = async () => {
     setApproving(true);
-    await onApprove(permissions, shareTarget);
+    await onApprove({ ...permissions, view: true, control: true, clipboard: true, file_transfer: true }, shareTarget);
   };
 
   const togglePermission = (key: keyof typeof permissions) => {
-    if (key === 'view') return;
+    if (key !== 'audio') return;
     setPermissions((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -45,71 +47,15 @@ export function ConsentScreen({ onApprove, onReject }: ConsentScreenProps) {
           </div>
 
           <div className="p-6">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-              <h2 className="font-semibold text-yellow-800 mb-2">What will be shared:</h2>
-              <ul className="text-sm text-yellow-700 space-y-1">
-                <li className="flex items-center gap-2">
-                  <Eye className="w-4 h-4" />
-                  Screen content (required)
-                </li>
-                {permissions.control && (
-                  <li className="flex items-center gap-2">
-                    <MousePointer className="w-4 h-4" />
-                    Mouse and keyboard control
-                  </li>
-                )}
-                {permissions.clipboard && (
-                  <li className="flex items-center gap-2">
-                    <Clipboard className="w-4 h-4" />
-                    Clipboard access
-                  </li>
-                )}
-                {permissions.file_transfer && (
-                  <li className="flex items-center gap-2">
-                    <FileUp className="w-4 h-4" />
-                    File transfer
-                  </li>
-                )}
-                {permissions.audio && (
-                  <li className="flex items-center gap-2">
-                    <Volume2 className="w-4 h-4" />
-                    Audio sharing
-                  </li>
-                )}
-              </ul>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+              <p className="text-sm text-yellow-700">
+                Shares screen, control, clipboard & files automatically
+                {permissions.audio ? ' + audio' : ''}.
+              </p>
             </div>
 
-            <h3 className="font-semibold text-gray-900 mb-3">Choose permissions:</h3>
+            <h3 className="font-semibold text-gray-900 mb-3">Optional:</h3>
             <div className="space-y-3 mb-6">
-              <PermissionToggle
-                icon={<Eye className="w-5 h-5" />}
-                label="View screen"
-                description="Required for support"
-                checked={permissions.view}
-                disabled={true}
-                onChange={() => {}}
-              />
-              <PermissionToggle
-                icon={<MousePointer className="w-5 h-5" />}
-                label="Remote control"
-                description="Allow technician to control mouse and keyboard"
-                checked={permissions.control}
-                onChange={() => togglePermission('control')}
-              />
-              <PermissionToggle
-                icon={<Clipboard className="w-5 h-5" />}
-                label="Clipboard sync"
-                description="Allow copying text between devices"
-                checked={permissions.clipboard}
-                onChange={() => togglePermission('clipboard')}
-              />
-              <PermissionToggle
-                icon={<FileUp className="w-5 h-5" />}
-                label="File transfer"
-                description="Allow sending and receiving files"
-                checked={permissions.file_transfer}
-                onChange={() => togglePermission('file_transfer')}
-              />
               <PermissionToggle
                 icon={<Volume2 className="w-5 h-5" />}
                 label="Audio sharing"

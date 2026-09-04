@@ -7,9 +7,9 @@ redis_url: "redis://localhost:6379"
 session_policy:
   default_expiry_minutes: 60
   max_expiry_minutes: 480
-  idle_timeout_minutes: 15
-  one_time_link_usage: true
-  consent_timeout_ms: 300000
+  idle_timeout_minutes: 40
+  one_time_link_usage: false
+  consent_timeout_ms: 2700000
   require_client_approval: true
   allow_remote_control: true
   allow_file_transfer: false
@@ -25,7 +25,7 @@ security:
   bcrypt_salt_rounds: 12
   max_login_attempts: 5
   login_lockout_ms: 1800000
-  token_expiry_ms: 900000
+  token_expiry_ms: 2700000
   refresh_token_expiry_days: 30
   cors_origins:
     - "http://localhost:5173"

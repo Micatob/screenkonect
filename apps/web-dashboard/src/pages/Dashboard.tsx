@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../App';
+import { useAuth, authFetch } from '../App';
 import { Monitor, Plus, LogOut, Clock, CheckCircle, XCircle, AlertCircle, Trash2 } from 'lucide-react';
 import type { Session } from '@screenkonect/shared';
 
@@ -18,11 +18,9 @@ export function Dashboard() {
 
   const fetchSessions = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/v1/sessions', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
+      const res = await authFetch('/v1/sessions');
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
       setSessions(data.sessions || []);
     } catch (err) {
       console.error('Failed to fetch sessions:', err);
@@ -34,16 +32,15 @@ export function Dashboard() {
   const createSession = async () => {
     setCreating(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/v1/sessions', {
+      const res = await authFetch('/v1/sessions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({}),
       });
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
       if (!res.ok) {
         throw new Error(data.error || 'Failed to create session');
       }
@@ -87,12 +84,11 @@ export function Dashboard() {
     if (!confirm('Delete this session? This cannot be undone.')) return;
     setDeleting(id);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/v1/sessions/${id}`, {
+      const res = await authFetch(`/v1/sessions/${id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
       if (!res.ok) throw new Error(data.error || 'Delete failed');
       setSessions((prev) => prev.filter((s) => s.id !== id));
       sessionStorage.removeItem(`sk_join_url_${id}`);
@@ -111,13 +107,12 @@ export function Dashboard() {
         : `Delete all ${mode} sessions?`;
     if (!confirm(msg)) return;
     try {
-      const token = localStorage.getItem('token');
       const qs = mode === 'all' ? '?all=true' : `?status=${mode}`;
-      const res = await fetch(`/v1/sessions${qs}`, {
+      const res = await authFetch(`/v1/sessions${qs}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
       if (!res.ok) throw new Error(data.error || 'Bulk delete failed');
       alert(`Deleted ${data.deleted_count || 0} sessions`);
       fetchSessions();

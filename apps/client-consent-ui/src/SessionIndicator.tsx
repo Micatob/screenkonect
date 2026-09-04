@@ -30,9 +30,15 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
       if (!permissions.view) return;
 
       try {
-        // Check secure context - getDisplayMedia requires https or localhost
-        if (!navigator.mediaDevices?.getDisplayMedia) {
-          throw new Error('Screen sharing not supported in this browser');
+        // getDisplayMedia requires secure context (https or localhost).
+        // Plain http://<IP> exposes no mediaDevices -> show actionable fix, not generic error.
+        if (!window.isSecureContext || !navigator.mediaDevices?.getDisplayMedia) {
+          throw new Error(
+            'Screen sharing is blocked because this page is opened over plain http://IP (not secure). ' +
+            'Fix A (best for testing): on your PC run ssh -L 8090:localhost:8090 root@168.222.97.214 then open http://localhost:8090/join/... and re-join with a NEW link. ' +
+            'Fix B: in Chrome open chrome://flags/#unsafely-treat-insecure-origin-as-secure, add http://168.222.97.214:8090, Enable, Relaunch, then re-join with a NEW link. ' +
+            'Fix C (production): put a domain on the VPS so Caddy serves https.'
+          );
         }
 
         // Use shareTarget to avoid mirror loop and ensure correct capture

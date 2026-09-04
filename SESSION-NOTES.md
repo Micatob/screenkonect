@@ -107,7 +107,31 @@ Port overrides (if ever needed): SK_*_PORT vars in root `.env` (see .env.example
   on host); full-Docker mode now also verified working.
 - user's request: if issues arise, resume from this file.
 
-## Session 2026-09-02 (single-port + Codespaces - YOU ARE HERE)
+## Session 2026-09-04b - rejoin + insecure-http share fix (UNPUSHED)
+
+- Join `Invalid or expired` on refresh: `services/session/src/routes/sessions.ts:196` removed `used=false` filter, only mark used first time, allow rejoin within 45min expiry. `one_time_link_usage true->false` in `packages/config/src/index.ts` + `config/default.yaml`. Old links in DB still 5min/used - must create NEW session after deploy.
+- `Screen sharing not supported`: root cause is insecure context - `http://168.222.97.214:8090` exposes no `navigator.mediaDevices`. `SessionIndicator.tsx` now shows actionable fix (SSH tunnel localhost:8090 / chrome flag / domain https) instead of generic error.
+- Slim popup not showing = old JS: VPS never pulled or Vite cached. Verify with `grep Optional ConsentScreen.tsx` + hard refresh Ctrl+Shift+R + `--force-recreate client-consent-ui`.
+- session typecheck OK, config OK, consent only pre-existing controlChannel unused.
+
+## Session 2026-09-04 - 45min timeout + slim consent popup (UNPUSHED)
+
+- Timeout fix (Invalid/expired + Connection error): `packages/shared/src/utils/token.ts` `15m->45m` (JWT_ACCESS_EXPIRY env), `packages/config/src/index.ts` + `config/default.yaml` `token_expiry_ms 900000->2700000`, `consent_timeout_ms 300000(5min)->2700000(45min)` max `->7200000`, `idle_timeout_minutes 15->40`. Join links + access tokens now last 40min+.
+- Dashboard no longer dies at 15min: `apps/web-dashboard/src/App.tsx` stores `refresh_token`, `refreshAccessToken()` + `authFetch()` retry once on 401, auto-refresh every 40min, `safeJson()` avoids `JSON.parse: unexpected end` on 502. `Dashboard.tsx` + `Session.tsx` use `authFetch`.
+- Consent popup shortened: `apps/client-consent-ui/src/ConsentScreen.tsx` hides default-on view/control/clipboard/file_transfer (still sent true), shows only Audio toggle + one-line summary.
+- Local typecheck: shared OK, dashboard OK, consent has 1 pre-existing `SessionIndicator.tsx:102 controlChannel unused`.
+- Deploy: PC `git add/commit/push`, VPS `git pull`, rebuild shared/config dist, `up -d --force-recreate auth session signaling web-dashboard client-consent-ui`, re-login (new 45min token).
+
+## Session 2026-09-03 22:15 WAT - Termius VPS 168.222.97.214 / 7d5x0lo9
+
+- VPS fresh `git clone Micatob/screenkonect` -> `docker compose -f deploy/docker-compose.yaml up -d --build` starts but `auth/session/signaling Up (unhealthy)`, `gateway 502 Bad Gateway` on `POST /v1/auth/login`, dashboard shows `JSON.parse: unexpected end of data` (`apps/web-dashboard/src/App.tsx:65` does `res.json()` on empty 502 body).
+- Root cause: `packages/*/dist` gitignored, VPS has no dist. Container log: `Cannot find module '/app/node_modules/@screenkonect/config/dist/index.js'`. Local PC has dist built, VPS doesn't.
+- Fix attempt: `docker compose run --rm auth sh -c "npm run build -w @screenkonect/shared -w @screenkonect/config -w @screenkonect/db"` then `up -d`. Still unhealthy 14min + `POST /v1/auth/register` empty. Next to verify: `ls packages/config/dist`, `logs --tail 30 auth`, then `up -d --force-recreate auth session signaling`.
+- VPS quirks hit: `apt install docker.io docker-compose-plugin` -> `E: Unable to locate package docker-compose-plugin` + `docker.service does not exist`. Fixed with `curl -fsSL https://get.docker.com | sh`. GitHub private clone rejects password, needs PAT `ghp_...@github.com` or make repo public temporarily.
+- SFTP warning: do NOT SFTP folder (node_modules 207MB -> 105MB stall at 5MB). Use `git clone` or single tar excluding node_modules/.git.
+- Must use `http://168.222.97.214:8090` (with :8090), not bare IP (port 80 empty).
+
+## Session 2026-09-02 (single-port + Codespaces)
 
 - User is in **Nigeria**, no local public IP, no card for Oracle (`eu-frankfurt-1` requires card). Chose **GitHub Codespaces free** (`120 core-hours/mo`, `15GB`) as completely free public host instead of Oracle/VPS.
 - Created private GitHub repo `Micatob/screenkonect` via API (`POST /user/repos` private=true), pushed local `d063e73` (120 files) + `376dee8` (.devcontainer) + `82c4c2e` (fix). Remote `origin https://github.com/Micatob/screenkonect.git` branch `main`.

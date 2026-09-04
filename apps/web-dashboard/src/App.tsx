@@ -29,51 +29,135 @@ export function useAuth() {
   return context;
 }
 
+async function safeJson(res: Response): Promise<any> {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+export async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem('refresh_token');
+  if (!refreshToken) return null;
+  try {
+    const res = await fetch('/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    const data = await safeJson(res);
+    if (!res.ok || !data.access_token) return null;
+    localStorage.setItem('token', data.access_token);
+    if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
+    return data.access_token as string;
+  } catch {
+    return null;
+  }
+}
+
+export async function authFetch(input: RequestInfo, init: RequestInit = {}, retry = true): Promise<Response> {
+  const token = localStorage.getItem('token');
+  const res = await fetch(input, {
+    ...init,
+    headers: { ...(init.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (res.status === 401 && retry) {
+    const fresh = await refreshAccessToken();
+    if (fresh) {
+      return fetch(input, {
+        ...init,
+        headers: { ...(init.headers || {}), Authorization: `Bearer ${fresh}` },
+      });
+    }
+  }
+  return res;
+}
+
 function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
 
   useEffect(() => {
-    if (token) {
-      fetch('/v1/auth/me', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.user) {
-            setUser(data.user);
-          } else {
-            localStorage.removeItem('token');
-            setToken(null);
+    if (!token) return;
+    let cancelled = false;
+    const loadMe = async (t: string, retry = true): Promise<void> => {
+      try {
+        const res = await fetch('/v1/auth/me', {
+          headers: { Authorization: `Bearer ${t}` },
+        });
+        if (res.status === 401 && retry) {
+          const fresh = await refreshAccessToken();
+          if (fresh && !cancelled) {
+            setToken(fresh);
+            await loadMe(fresh, false);
+            return;
           }
-        })
-        .catch(() => {
+          throw new Error('unauthorized');
+        }
+        const data = await safeJson(res);
+        if (cancelled) return;
+        if (data.user) {
+          setUser(data.user);
+        } else {
           localStorage.removeItem('token');
           setToken(null);
-        });
-    }
+        }
+      } catch {
+        if (cancelled) return;
+        // Don't logout on transient network/502 - keep token, user can retry
+        // Only clear if refresh also failed with no network-independent signal.
+        // Try one silent refresh before giving up.
+        try {
+          const fresh = await refreshAccessToken();
+          if (fresh && !cancelled) {
+            setToken(fresh);
+            return;
+          }
+        } catch {}
+      }
+    };
+    loadMe(token);
+    // Auto-refresh every 40min so 45min access token never expires mid-session
+    const iv = setInterval(async () => {
+      const fresh = await refreshAccessToken();
+      if (fresh) setToken(fresh);
+    }, 40 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
   }, [token]);
 
   const login = async (email: string, password: string) => {
-    const res = await fetch('/v1/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'Login failed');
+    let res: Response;
+    try {
+      res = await fetch('/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+    } catch {
+      throw new Error('Connection error - server not reachable. Wait 30s and retry.');
     }
 
-    const data = await res.json();
+    const data = await safeJson(res);
+    if (!res.ok) {
+      throw new Error(data.error || (res.status === 502 ? 'Server starting - wait 30s and retry' : 'Login failed'));
+    }
+
     localStorage.setItem('token', data.access_token);
+    if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
+    // Schedule pre-emptive refresh 1min before expiry (expires_in secs, default 2700)
     setToken(data.access_token);
     setUser(data.user);
   };
 
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
     setToken(null);
     setUser(null);
   };
