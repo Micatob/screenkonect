@@ -106,13 +106,15 @@ export function ConsentScreen({ onApprove }: ConsentScreenProps) {
                 <li>Keep this page open until the technician connects</li>
               </ol>
               <a
-                href="https://github.com/Micatob/screenkonect/releases"
-                target="_blank"
-                rel="noreferrer"
+                href="/downloads/screenkonect-agent.exe"
+                download="screenkonect-agent.exe"
                 className="block text-center py-2 px-4 bg-white text-gray-900 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
               >
                 Download Windows agent
               </a>
+              <p className="text-xs text-gray-500 mt-2">
+                After downloading, double-click the file (Windows may ask "Unknown publisher" - click More info / Run anyway), paste your join link, and keep this page open.
+              </p>
             </div>
 
             <div className="flex gap-3">

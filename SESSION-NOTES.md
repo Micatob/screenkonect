@@ -107,7 +107,17 @@ Port overrides (if ever needed): SK_*_PORT vars in root `.env` (see .env.example
   on host); full-Docker mode now also verified working.
 - user's request: if issues arise, resume from this file.
 
-## Session 2026-09-04c - single Allow button + agent one-click pipeline (PUSHED, VPS TEST PENDING)
+## Session 2026-09-04d - direct /downloads exe from VPS (PUSHED, EXE PLACEMENT PENDING)
+
+- Download button pointed at GitHub /releases (empty + private = clients hit login wall). Fixed: gateway serves `deploy/downloads/` at `/downloads/*` (`Caddyfile`, compose mount `./downloads:/srv/downloads:ro`), button now `href="/downloads/screenkonect-agent.exe"` + SmartScreen note.
+- Exe still has to be placed once: Actions artifact -> `deploy/downloads/screenkonect-agent.exe` on VPS -> recreate gateway. README in folder.
+- No auto-run possible from a webpage (browser security) - client double-clicks + pastes link. Unsigned exe = SmartScreen "Unknown publisher" until a code-sign cert exists.
+
+## Session 2026-09-04c - single Allow button + agent one-click pipeline (SAVED 2026-09-04, VPS TEST PENDING)
+
+- Pushed `b410fd6` to main. Termius paste given (pull + force-recreate client-consent-ui + hard refresh). Awaiting user test.
+- Exe: CI run building `screenkonect-agent.exe` as action artifact; Release asset needs `agent-v*` tag.
+- Next dev (needs Rust toolchain): agent join protocol (code-as-id 404, token-as-session_id).
 
 - Consent: Deny button REMOVED, single `Allow access` full-width button (`ConsentScreen.tsx`). Owner asked Deny to also grant access - declined as deceptive (client clicking Deny must not silently grant control); removing the button achieves one-click access honestly. Closing window still refuses. `onReject` kept optional for compat.
 - Agent one-click: `config.rs` +Clone (was a compile blocker: 5x config.clone() with no Clone impl), new `--join-url <link>` flag (one paste sets server+token), `--help` updated, `signaling.rs` https->wss fix (was always ws://, broke https servers).

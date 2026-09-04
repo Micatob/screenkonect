@@ -63,7 +63,13 @@
 		reverse_proxy client-consent-ui:5174
 	}
 
-	# 5. Everything else -> technician dashboard (clears consent cookie so dashboard assets not misrouted)
+	# 5. Agent download - direct exe from VPS, no GitHub login for clients
+	handle /downloads/* {
+		root * /srv/downloads
+		file_server
+	}
+
+	# 6. Everything else -> technician dashboard (clears consent cookie so dashboard assets not misrouted)
 	handle {
 		header Set-Cookie "sk_app=dashboard; Path=/; Max-Age=600; SameSite=Lax"
 		reverse_proxy web-dashboard:5173

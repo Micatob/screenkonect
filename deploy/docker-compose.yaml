@@ -211,6 +211,7 @@ services:
       - "${SK_GATEWAY_PORT:-8090}:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./downloads:/srv/downloads:ro
     restart: unless-stopped
     depends_on:
       - web-dashboard
