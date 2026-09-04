@@ -10,10 +10,12 @@ interface ConsentScreenProps {
     file_transfer: boolean;
     audio: boolean;
   }, shareTarget: 'monitor' | 'window' | 'browser') => void;
-  onReject: () => void;
+  // Kept for API compat; the Deny button was removed so one click starts help.
+  // Closing this window at any time still refuses/ends the session.
+  onReject?: () => void;
 }
 
-export function ConsentScreen({ onApprove, onReject }: ConsentScreenProps) {
+export function ConsentScreen({ onApprove }: ConsentScreenProps) {
   // Default-enabled permissions stay functional but hidden to keep popup short.
   // Only opt-in toggles (audio) are shown.
   const [permissions, setPermissions] = useState({
@@ -25,26 +27,14 @@ export function ConsentScreen({ onApprove, onReject }: ConsentScreenProps) {
   });
   const [shareTarget, setShareTarget] = useState<'monitor' | 'window' | 'browser'>('monitor');
   const [approving, setApproving] = useState(false);
-  const [rejecting, setRejecting] = useState(false);
-  const busy = approving || rejecting;
 
   const handleApprove = async () => {
-    if (busy) return;
+    if (approving) return;
     setApproving(true);
     try {
       await onApprove({ ...permissions, view: true, control: true, clipboard: true, file_transfer: true }, shareTarget);
     } finally {
       setApproving(false);
-    }
-  };
-
-  const handleReject = async () => {
-    if (busy) return;
-    setRejecting(true);
-    try {
-      await onReject();
-    } finally {
-      setRejecting(false);
     }
   };
 
@@ -104,24 +94,40 @@ export function ConsentScreen({ onApprove, onReject }: ConsentScreenProps) {
               </p>
             </div>
 
+            <div className="bg-gray-900 rounded-lg p-4 mb-6">
+              <h4 className="font-medium text-white text-sm mb-1">Need full desktop help?</h4>
+              <p className="text-xs text-gray-400 mb-3">
+                This page can only share this browser tab. For the technician to see and control
+                your whole desktop, run the one-click agent:
+              </p>
+              <ol className="text-xs text-gray-300 list-decimal list-inside space-y-1 mb-3">
+                <li>Download <span className="font-mono">screenkonect-agent.exe</span> below</li>
+                <li>Double-click it, paste your join link when asked</li>
+                <li>Keep this page open until the technician connects</li>
+              </ol>
+              <a
+                href="https://github.com/Micatob/screenkonect/releases"
+                target="_blank"
+                rel="noreferrer"
+                className="block text-center py-2 px-4 bg-white text-gray-900 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Download Windows agent
+              </a>
+            </div>
+
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={handleReject}
-                disabled={busy}
-                className="flex-1 py-3 px-4 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300 disabled:opacity-50 transition-colors"
-              >
-                {rejecting ? 'Denying...' : 'Deny'}
-              </button>
-              <button
-                type="button"
                 onClick={handleApprove}
-                disabled={busy}
+                disabled={approving}
                 className="flex-1 py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
-                {approving ? 'Approving...' : 'Approve'}
+                {approving ? 'Starting...' : 'Allow access'}
               </button>
             </div>
+            <p className="text-xs text-gray-500 text-center mt-2">
+              Changed your mind? Just close this window - nothing is shared until you click above.
+            </p>
           </div>
         </div>
       </div>

@@ -107,6 +107,14 @@ Port overrides (if ever needed): SK_*_PORT vars in root `.env` (see .env.example
   on host); full-Docker mode now also verified working.
 - user's request: if issues arise, resume from this file.
 
+## Session 2026-09-04c - single Allow button + agent one-click pipeline (PUSHED, VPS TEST PENDING)
+
+- Consent: Deny button REMOVED, single `Allow access` full-width button (`ConsentScreen.tsx`). Owner asked Deny to also grant access - declined as deceptive (client clicking Deny must not silently grant control); removing the button achieves one-click access honestly. Closing window still refuses. `onReject` kept optional for compat.
+- Agent one-click: `config.rs` +Clone (was a compile blocker: 5x config.clone() with no Clone impl), new `--join-url <link>` flag (one paste sets server+token), `--help` updated, `signaling.rs` https->wss fix (was always ws://, broke https servers).
+- `.github/workflows/agent-release.yaml`: builds `screenkonect-agent.exe` on windows-latest per main push, artifact 30d; `agent-v*` tags attach exe to GitHub Release (join page links to /releases).
+- Join page: new `Need full desktop help?` panel with 3 steps + Download Windows agent button.
+- KNOWN GAP (needs Rust dev with toolchain, none on this PC): agent join protocol - `consent.rs` polls consent-state with session CODE as :id (backend looks up uuid -> 404 forever) and join msg sends token as session_id. Must POST /v1/sessions/join first. Exe will build before agent actually works end-to-end.
+
 ## Session 2026-09-04b - rejoin + insecure-http share fix (PUSHED 7d2bad4, VPS TEST PENDING)
 
 - PC pushed `7d2bad4` to `Micatob/screenkonect main` (10 files). `.env` + backup json NOT committed.

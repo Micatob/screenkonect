@@ -24,10 +24,13 @@ impl SignalingClient {
     pub async fn connect(config: &Config) -> Result<Self> {
         info!("Connecting to signaling server: {}", config.url);
 
-        let ws_url = format!(
-            "ws://{}/ws/signaling",
-            config.url.replace("http://", "").replace("https://", "")
-        );
+        // https servers need wss, plain http uses ws
+        let (scheme, host) = if let Some(h) = config.url.strip_prefix("https://") {
+            ("wss", h)
+        } else {
+            ("ws", config.url.strip_prefix("http://").unwrap_or(&config.url))
+        };
+        let ws_url = format!("{}://{}/ws/signaling", scheme, host.trim_end_matches('/'));
 
         let (ws_stream, _) = connect_async(&ws_url)
             .await
