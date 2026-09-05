@@ -325,6 +325,8 @@ export async function sessionRoutes(app: FastifyInstance) {
                   clipboard: true,
                   file_transfer: false,
                   audio: false,
+                  camera: false,
+                  mic: false,
                 },
               })
               .where(eq(sessions.id, session.id));

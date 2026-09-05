@@ -57,6 +57,8 @@ export const sessions = pgTable(
         clipboard: false,
         file_transfer: false,
         audio: false,
+        camera: false,
+        mic: false,
       })
       .$type<{
         view: boolean;
@@ -64,6 +66,8 @@ export const sessions = pgTable(
         clipboard: boolean;
         file_transfer: boolean;
         audio: boolean;
+        camera: boolean;
+        mic: boolean;
       }>(),
     client_platform: varchar('client_platform', { length: 20 }),
     client_ip: inet('client_ip'),

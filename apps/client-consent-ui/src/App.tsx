@@ -8,12 +8,15 @@ interface SessionInfo {
   id: string;
   status: string;
   consent_state: string;
+  max_duration_minutes?: number;
   permissions: {
     view: boolean;
     control: boolean;
     clipboard: boolean;
     file_transfer: boolean;
     audio: boolean;
+    camera?: boolean;
+    mic?: boolean;
   };
 }
 
@@ -84,6 +87,8 @@ export default function App() {
     clipboard: boolean;
     file_transfer: boolean;
     audio: boolean;
+    camera: boolean;
+    mic: boolean;
   }, target: 'monitor' | 'window' | 'browser' = 'monitor') => {
     if (!session) return;
     setShareTarget(target);
@@ -196,6 +201,7 @@ export default function App() {
     return (
       <ConsentScreen
         sessionId={session.id}
+        durationMinutes={session.max_duration_minutes || 60}
         onApprove={handleApprove}
         onReject={handleReject}
       />

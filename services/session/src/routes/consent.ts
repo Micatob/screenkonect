@@ -11,6 +11,8 @@ const ApproveSchema = z.object({
     clipboard: z.boolean().default(false),
     file_transfer: z.boolean().default(false),
     audio: z.boolean().default(false),
+    camera: z.boolean().default(false),
+    mic: z.boolean().default(false),
   }),
 });
 

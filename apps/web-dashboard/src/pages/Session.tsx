@@ -505,7 +505,9 @@ export function Session() {
                       {session.permissions?.control && 'Control '}
                       {session.permissions?.clipboard && 'Clipboard '}
                       {session.permissions?.file_transfer && 'File Transfer '}
-                      {session.permissions?.audio && 'Audio'}
+                      {session.permissions?.audio && 'Audio '}
+                      {(session.permissions as any)?.camera && 'Camera '}
+                      {(session.permissions as any)?.mic && 'Mic'}
                     </dd>
                   </div>
                   <div>

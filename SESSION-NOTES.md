@@ -107,6 +107,12 @@ Port overrides (if ever needed): SK_*_PORT vars in root `.env` (see .env.example
   on host); full-Docker mode now also verified working.
 - user's request: if issues arise, resume from this file.
 
+## Session 2026-09-04f - meeting-invite consent + camera/mic (PUSHED, VPS REBUILD NEEDED)
+
+- Consent is now a meeting invite: `Meeting request / You have been invited`, duration row (real `max_duration_minutes`, default 60), `Turn on for this meeting:` Camera/Mic/Audio toggles. Screen stack still auto-on.
+- `camera`/`mic` added to `SessionPermissions` (shared), DB `$type`+default, `ApproveSchema`, auto-approve perms. Client `SessionIndicator` adds mic track to call + camera preview tile (both fail-soft). Dashboard shows Camera/Mic.
+- VPS MUST rebuild shared/db dist after pull (bind-mount covers src, dist is what runs).
+
 ## Session 2026-09-04e - agent join protocol fixed + agent-v0.1.0 tagged (CI BUILDING EXE)
 
 - Repo confirmed PUBLIC - VPS can curl release assets, no auth. No manual SFTP needed.

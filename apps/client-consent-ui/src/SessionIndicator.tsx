@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Monitor, Shield, Eye, MousePointer, Clipboard, FileUp, Volume2 } from 'lucide-react';
+import { Monitor, Shield, Eye, MousePointer, Clipboard, FileUp, Volume2, Camera, Mic } from 'lucide-react';
 
 interface SessionIndicatorProps {
   sessionId: string;
@@ -9,6 +9,8 @@ interface SessionIndicatorProps {
     clipboard: boolean;
     file_transfer: boolean;
     audio: boolean;
+    camera?: boolean;
+    mic?: boolean;
   };
   shareTarget?: 'monitor' | 'window' | 'browser';
   onEndSession: () => void;
@@ -22,6 +24,8 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const micRef = useRef<MediaStream | null>(null);
+  const camRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +107,42 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
         const pendingCandidates: RTCIceCandidateInit[] = [];
 
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+        // Optional meeting devices (fail soft - meeting continues without them)
+        if (permissions.mic) {
+          try {
+            const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            if (cancelled) {
+              micStream.getTracks().forEach((t) => t.stop());
+            } else {
+              micStream.getAudioTracks().forEach((track) => pc.addTrack(track, micStream));
+              micRef.current = micStream;
+            }
+          } catch (e) {
+            console.warn('[sharing] mic unavailable, continuing without it', e);
+          }
+        }
+        if (permissions.camera) {
+          try {
+            const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            if (cancelled) {
+              camStream.getTracks().forEach((t) => t.stop());
+            } else {
+              camRef.current = camStream;
+              const tile = document.createElement('video');
+              tile.id = 'camera-preview-tile';
+              tile.autoplay = true;
+              (tile as any).playsInline = true;
+              (tile as HTMLVideoElement).muted = true;
+              tile.style.cssText =
+                'position:fixed;bottom:16px;right:16px;width:160px;border-radius:8px;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+              (tile as HTMLVideoElement).srcObject = camStream;
+              document.body.appendChild(tile);
+            }
+          } catch (e) {
+            console.warn('[sharing] camera unavailable, continuing without it', e);
+          }
+        }
 
         // Data channels for remote control + file transfer + clipboard
         let controlChannel: RTCDataChannel | null = null;
@@ -325,6 +365,15 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
+      if (micRef.current) {
+        micRef.current.getTracks().forEach((t) => t.stop());
+        micRef.current = null;
+      }
+      if (camRef.current) {
+        camRef.current.getTracks().forEach((t) => t.stop());
+        camRef.current = null;
+      }
+      document.getElementById('camera-preview-tile')?.remove();
       if (pcRef.current) {
         try {
           pcRef.current.close();
@@ -338,7 +387,7 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
         wsRef.current = null;
       }
     };
-  }, [sessionId, permissions.view, permissions.audio, permissions.control]);
+  }, [sessionId, permissions.view, permissions.audio, permissions.control, permissions.camera, permissions.mic]);
 
   const handleEnd = async () => {
     if (ending) return;
@@ -403,6 +452,18 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
                     <div className="flex items-center gap-2">
                       <Volume2 className="w-4 h-4" />
                       <span>Audio sharing</span>
+                    </div>
+                  )}
+                  {permissions.camera && (
+                    <div className="flex items-center gap-2">
+                      <Camera className="w-4 h-4" />
+                      <span>Camera</span>
+                    </div>
+                  )}
+                  {permissions.mic && (
+                    <div className="flex items-center gap-2">
+                      <Mic className="w-4 h-4" />
+                      <span>Microphone</span>
                     </div>
                   )}
                 </div>

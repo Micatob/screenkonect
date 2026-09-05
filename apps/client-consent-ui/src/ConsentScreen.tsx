@@ -1,29 +1,34 @@
 import { useState } from 'react';
-import { Shield, Volume2 } from 'lucide-react';
+import { Video, Camera, Mic, Volume2, Clock, Monitor } from 'lucide-react';
 
 interface ConsentScreenProps {
   sessionId: string;
+  durationMinutes?: number;
   onApprove: (permissions: {
     view: boolean;
     control: boolean;
     clipboard: boolean;
     file_transfer: boolean;
     audio: boolean;
+    camera: boolean;
+    mic: boolean;
   }, shareTarget: 'monitor' | 'window' | 'browser') => void;
   // Kept for API compat; the Deny button was removed so one click starts help.
   // Closing this window at any time still refuses/ends the session.
   onReject?: () => void;
 }
 
-export function ConsentScreen({ onApprove }: ConsentScreenProps) {
-  // Default-enabled permissions stay functional but hidden to keep popup short.
-  // Only opt-in toggles (audio) are shown.
+export function ConsentScreen({ durationMinutes = 60, onApprove }: ConsentScreenProps) {
+  // Screen/control/clipboard/files are always on (shown as meeting defaults below).
+  // Camera, mic and audio are opt-in toggles.
   const [permissions, setPermissions] = useState({
     view: true,
     control: true,
     clipboard: true,
     file_transfer: true,
     audio: false,
+    camera: false,
+    mic: false,
   });
   const [shareTarget, setShareTarget] = useState<'monitor' | 'window' | 'browser'>('monitor');
   const [approving, setApproving] = useState(false);
@@ -38,31 +43,60 @@ export function ConsentScreen({ onApprove }: ConsentScreenProps) {
     }
   };
 
-  const togglePermission = (key: keyof typeof permissions) => {
-    if (key !== 'audio') return;
+  const togglePermission = (key: 'audio' | 'camera' | 'mic') => {
     setPermissions((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  const extrasOn = [
+    permissions.camera && 'camera',
+    permissions.mic && 'mic',
+    permissions.audio && 'audio',
+  ].filter(Boolean).join(', ');
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-lg">
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="bg-blue-600 p-6 text-center">
-            <Shield className="w-12 h-12 text-white mx-auto mb-3" />
-            <h1 className="text-2xl font-bold text-white">Remote Support Request</h1>
-            <p className="text-blue-100 mt-2">A technician is requesting access to your device</p>
+            <Video className="w-12 h-12 text-white mx-auto mb-3" />
+            <h1 className="text-2xl font-bold text-white">Meeting request</h1>
+            <p className="text-blue-100 mt-2">You have been invited to this meeting</p>
           </div>
 
           <div className="p-6">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-yellow-700">
-                Shares screen, control, clipboard & files automatically
-                {permissions.audio ? ' + audio' : ''}.
+            <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
+              <Clock className="w-5 h-5 text-gray-500 shrink-0" />
+              <p className="text-sm text-gray-700">
+                Duration <strong>{durationMinutes} minutes</strong>
               </p>
             </div>
 
-            <h3 className="font-semibold text-gray-900 mb-3">Optional:</h3>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+              <p className="text-sm text-yellow-700 flex items-start gap-2">
+                <Monitor className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>
+                  Screen, control, clipboard &amp; files are shared automatically
+                  {extrasOn ? `, plus ${extrasOn}` : ''}.
+                </span>
+              </p>
+            </div>
+
+            <h3 className="font-semibold text-gray-900 mb-3">Turn on for this meeting:</h3>
             <div className="space-y-3 mb-6">
+              <PermissionToggle
+                icon={<Camera className="w-5 h-5" />}
+                label="Camera"
+                description="Share your camera video"
+                checked={permissions.camera}
+                onChange={() => togglePermission('camera')}
+              />
+              <PermissionToggle
+                icon={<Mic className="w-5 h-5" />}
+                label="Microphone"
+                description="Let the technician hear you"
+                checked={permissions.mic}
+                onChange={() => togglePermission('mic')}
+              />
               <PermissionToggle
                 icon={<Volume2 className="w-5 h-5" />}
                 label="Audio sharing"

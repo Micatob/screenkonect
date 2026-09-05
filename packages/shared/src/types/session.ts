@@ -3,7 +3,7 @@ export type ConsentState = 'none' | 'pending' | 'approved' | 'denied' | 'revoked
 export type TokenType = 'client_join' | 'technician_reconnect';
 export type UserRole = 'technician' | 'admin';
 export type Platform = 'windows' | 'macos' | 'linux';
-export type PermissionKey = 'view' | 'control' | 'clipboard' | 'file_transfer' | 'audio';
+export type PermissionKey = 'view' | 'control' | 'clipboard' | 'file_transfer' | 'audio' | 'camera' | 'mic';
 export type ConsentEventType =
   | 'consent_requested'
   | 'consent_approved'
@@ -19,6 +19,8 @@ export interface SessionPermissions {
   clipboard: boolean;
   file_transfer: boolean;
   audio: boolean;
+  camera: boolean;
+  mic: boolean;
 }
 
 export interface Session {
