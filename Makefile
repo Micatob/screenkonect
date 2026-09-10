@@ -62,3 +62,17 @@ status: ## Show running containers and API health
 		code=$$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$$port/ || echo "ERR"); \
 		echo "web app ($$port): $$code"; \
 	done
+
+agent-build: ## Build the Rust desktop agent (requires Rust toolchain)
+	cd apps/desktop-agent && cargo build --release
+	cp apps/desktop-agent/target/release/screenkonect-agent.exe deploy/downloads/screenkonect-agent.exe 2>/dev/null || \
+	cp apps/desktop-agent/target/release/screenkonect-agent deploy/downloads/screenkonect-agent 2>/dev/null || \
+	echo "Build complete but binary not found - check apps/desktop-agent/target/release/"
+
+agent-download: ## Download latest agent release from GitHub
+	@echo "Downloading latest agent from GitHub releases..."
+	powershell -Command "Invoke-WebRequest -Uri 'https://github.com/anomalyco/screenkonect/releases/latest/download/screenkonect-agent-windows.exe' -OutFile 'deploy/downloads/screenkonect-agent.exe'" 2>/dev/null || \
+		echo "Could not download from GitHub. Build locally with 'make agent-build' or place the exe manually in deploy/downloads/"
+
+gateway-recreate: ## Recreate gateway after adding agent binary
+	docker compose -f deploy/docker-compose.yaml up -d --force-recreate gateway

@@ -10,10 +10,10 @@ session_policy:
   idle_timeout_minutes: 40
   one_time_link_usage: false
   consent_timeout_ms: 2700000
-  require_client_approval: true
+  require_client_approval: false
   allow_remote_control: true
-  allow_file_transfer: false
-  allow_clipboard_sync: false
+  allow_file_transfer: true
+  allow_clipboard_sync: true
   allow_recording: false
   require_recording_consent: true
   max_viewers_per_session: 5

@@ -1,0 +1,18 @@
+{
+  "name": "ScreenKonect - Support Session",
+  "short_name": "ScreenKonect",
+  "description": "Secure remote support session - share your screen with a technician",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f9fafb",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

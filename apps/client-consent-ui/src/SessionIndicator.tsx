@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Monitor, Shield, Eye, MousePointer, Clipboard, FileUp, Volume2, Camera, Mic } from 'lucide-react';
+import { Monitor, Shield, Eye, MousePointer, Clipboard, FileUp, Volume2, Camera, Mic, AlertTriangle } from 'lucide-react';
 
 interface SessionIndicatorProps {
   sessionId: string;
@@ -21,11 +21,15 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
   const [ending, setEnding] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stalled, setStalled] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const micRef = useRef<MediaStream | null>(null);
   const camRef = useRef<MediaStream | null>(null);
+
+  const isMobile = /android|iphone|ipad|iPod/i.test(navigator.userAgent);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,44 +42,66 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
         // Plain http://<IP> exposes no mediaDevices -> show actionable fix, not generic error.
         if (!window.isSecureContext || !navigator.mediaDevices?.getDisplayMedia) {
           throw new Error(
-            'Screen sharing is blocked because this page is opened over plain http://IP (not secure). ' +
-            'Fix A (best for testing): on your PC run ssh -L 8090:localhost:8090 root@168.222.97.214 then open http://localhost:8090/join/... and re-join with a NEW link. ' +
-            'Fix B: in Chrome open chrome://flags/#unsafely-treat-insecure-origin-as-secure, add http://168.222.97.214:8090, Enable, Relaunch, then re-join with a NEW link. ' +
-            'Fix C (production): put a domain on the VPS so Caddy serves https.'
+            'Screen sharing requires a secure connection (https). ' +
+            'Options to fix this:\n' +
+            '1. Cloudflare Tunnel (free): On your PC run cloudflared tunnel --url http://localhost:8090, then open the public URL it prints\n' +
+            '2. Tailscale Funnel (free): On your PC run tailscale funnel --bg 8090, then open the URL it prints\n' +
+            '3. VPS: Deploy to your VPS (e.g. 168.222.97.214:8090) — friends connect to the public IP\n' +
+            '4. Quick test: in Chrome open chrome://flags/#unsafely-treat-insecure-origin-as-secure, add your URL, Enable, Relaunch'
           );
         }
 
-        // Use shareTarget to avoid mirror loop and ensure correct capture
-        // monitor = entire screen (desktop), window = single window, browser = tab
-        // selfBrowserSurface: exclude avoids capturing the consent tab itself (prevents mirror)
-        const videoConstraints: any = {};
-        if (shareTarget === 'monitor') {
-          videoConstraints.displaySurface = 'monitor';
-          videoConstraints.selfBrowserSurface = 'exclude';
-        } else if (shareTarget === 'window') {
-          videoConstraints.displaySurface = 'window';
-          videoConstraints.selfBrowserSurface = 'exclude';
-        } else {
-          videoConstraints.displaySurface = 'browser';
-          videoConstraints.selfBrowserSurface = 'exclude';
-        }
-        // Try with constraints, fallback to simple if not supported (Firefox)
+        // Android Chrome doesn't support displaySurface/selfBrowserSurface constraints
+        // Use simple constraints on mobile, full constraints on desktop
         let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getDisplayMedia({
-            video: videoConstraints,
-            audio: permissions.audio,
-            // @ts-ignore - Chrome specific to prefer monitor and exclude self
-            preferCurrentTab: false,
-            selfBrowserSurface: 'exclude',
-            systemAudio: permissions.audio ? 'include' : 'exclude',
-          } as any);
-        } catch (e: any) {
-          console.warn('[sharing] constrained getDisplayMedia failed, fallback to video:true', e);
-          stream = await navigator.mediaDevices.getDisplayMedia({
-            video: true,
-            audio: permissions.audio,
-          } as any);
+        if (isMobile) {
+          // Mobile: simple constraints (Android Chrome supports getDisplayMedia for entire screen on Android 10+)
+          try {
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: true,
+              audio: permissions.audio,
+            } as any);
+          } catch (e: any) {
+            if (e?.name === 'AbortError' || e?.name === 'NotAllowedError') {
+              throw e;
+            }
+            // Fallback: try without audio
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: true,
+            } as any);
+          }
+        } else {
+          // Desktop: use shareTarget to avoid mirror loop and ensure correct capture
+          // monitor = entire screen (desktop), window = single window, browser = tab
+          // selfBrowserSurface: exclude avoids capturing the consent tab itself (prevents mirror)
+          const videoConstraints: any = {};
+          if (shareTarget === 'monitor') {
+            videoConstraints.displaySurface = 'monitor';
+            videoConstraints.selfBrowserSurface = 'exclude';
+          } else if (shareTarget === 'window') {
+            videoConstraints.displaySurface = 'window';
+            videoConstraints.selfBrowserSurface = 'exclude';
+          } else {
+            videoConstraints.displaySurface = 'browser';
+            videoConstraints.selfBrowserSurface = 'exclude';
+          }
+          // Try with constraints, fallback to simple if not supported (Firefox)
+          try {
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: videoConstraints,
+              audio: permissions.audio,
+              // @ts-ignore - Chrome specific to prefer monitor and exclude self
+              preferCurrentTab: false,
+              selfBrowserSurface: 'exclude',
+              systemAudio: permissions.audio ? 'include' : 'exclude',
+            } as any);
+          } catch (e: any) {
+            console.warn('[sharing] constrained getDisplayMedia failed, fallback to video:true', e);
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: true,
+              audio: permissions.audio,
+            } as any);
+          }
         }
         // Validate stream has video
         if (stream.getVideoTracks().length === 0) {
@@ -105,6 +131,7 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
         });
         pcRef.current = pc;
         const pendingCandidates: RTCIceCandidateInit[] = [];
+        const pendingRemoteCandidates: RTCIceCandidateInit[] = [];
 
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
@@ -145,14 +172,12 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
         }
 
         // Data channels for remote control + file transfer + clipboard
-        let controlChannel: RTCDataChannel | null = null;
         const fileReceivers = new Map<string, { chunks: ArrayBuffer[], fileName: string, fileSize: number, received: number }>();
         if (permissions.control || permissions.file_transfer || permissions.clipboard) {
           pc.ondatachannel = (event) => {
             const channel = event.channel;
             console.log('[data] ondatachannel', channel.label);
             if (channel.label === 'control' && permissions.control) {
-              controlChannel = channel;
               channel.onopen = () => console.log('[control] data channel open');
               channel.onmessage = (e) => {
                 try {
@@ -193,17 +218,24 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
                       fileMeta = { fileName: msg.fileName, fileSize: msg.fileSize };
                       fileReceivers.set(msg.fileName, { chunks: [], fileName: msg.fileName, fileSize: msg.fileSize, received: 0 });
                       console.log('[file] start', msg.fileName, msg.fileSize);
-                    } else if (msg.type === 'file-end' && fileMeta) {
-                      const rec = fileReceivers.get(fileMeta.fileName);
-                      if (rec) {
-                        const blob = new Blob(rec.chunks);
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url; a.download = rec.fileName; a.click();
-                        URL.revokeObjectURL(url);
-                        fileReceivers.delete(rec.fileName);
-                        console.log('[file] received', rec.fileName);
-                      }
+                            } else if (msg.type === 'file-end' && fileMeta) {
+                              const rec = fileReceivers.get(fileMeta.fileName);
+                              if (rec) {
+                                const blob = new Blob(rec.chunks);
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = rec.fileName;
+                                a.style.display = 'none';
+                                document.body.appendChild(a);
+                                a.click();
+                                setTimeout(() => {
+                                  document.body.removeChild(a);
+                                  URL.revokeObjectURL(url);
+                                }, 30000);
+                                fileReceivers.delete(fileMeta.fileName);
+                                console.log('[file] received', rec.fileName, blob.size, 'bytes');
+                              }
                     }
                   } catch {}
                 } else {
@@ -319,10 +351,17 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
               console.log('[sharing] received answer');
               if (pc.signalingState === 'have-local-offer') {
                 await pc.setRemoteDescription(new RTCSessionDescription(msg.payload));
+                for (const c of pendingRemoteCandidates.splice(0)) {
+                  try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+                }
               }
             } else if (msg.type === 'ice-candidate' && msg.payload) {
               try {
-                await pc.addIceCandidate(new RTCIceCandidate(msg.payload));
+                if (pc.remoteDescription) {
+                  await pc.addIceCandidate(new RTCIceCandidate(msg.payload));
+                } else {
+                  pendingRemoteCandidates.push(msg.payload);
+                }
               } catch (e) {
                 console.warn('[sharing] addIceCandidate failed', e);
               }
@@ -344,7 +383,9 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
 
         ws.onerror = (err) => {
           console.error('[sharing] ws error', err);
-          if (!cancelled) setError('Signaling connection failed');
+          if (!cancelled) {
+            setError('Could not connect to the support server. Try refreshing the page.');
+          }
         };
       } catch (err: any) {
         console.error('[sharing] getDisplayMedia failed', err);
@@ -387,7 +428,22 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
         wsRef.current = null;
       }
     };
-  }, [sessionId, permissions.view, permissions.audio, permissions.control, permissions.camera, permissions.mic]);
+  }, [sessionId, permissions.view, permissions.audio, permissions.control, permissions.camera, permissions.mic, retryCount]);
+
+  // If capture hasn't started after a few seconds, the system permission
+  // prompt is probably waiting (or was missed). Show actionable guidance.
+  useEffect(() => {
+    if (sharing || error) return;
+    const t = setTimeout(() => setStalled(true), 8000);
+    return () => clearTimeout(t);
+  }, [sharing, error, retryCount, sessionId]);
+
+  const handleRetry = () => {
+    setError(null);
+    setStalled(false);
+    setSharing(false);
+    setRetryCount((c) => c + 1);
+  };
 
   const handleEnd = async () => {
     if (ending) return;
@@ -407,17 +463,17 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
 
   return (
     <div className="fixed inset-0 pointer-events-none">
-      <div className="fixed top-4 right-4 pointer-events-auto">
+      <div className={`fixed top-4 right-4 pointer-events-auto ${isMobile ? 'left-4' : ''}`}>
         <div className="bg-red-600 text-white rounded-lg shadow-lg overflow-hidden">
           <button
             onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center gap-2 px-4 py-3 w-full hover:bg-red-700 transition-colors"
+            className={`flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-3 w-full hover:bg-red-700 transition-colors ${isMobile ? 'text-sm' : ''}`}
           >
             <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
-            <Monitor className="w-5 h-5" />
+            <Monitor className="w-4 h-4 sm:w-5 sm:h-5" />
             <span className="font-medium">Screen Shared</span>
-            <span className="text-red-200">•</span>
-            <span className="text-sm text-red-200">{sharing ? 'Active' : 'Starting...'}</span>
+            <span className="text-red-200 hidden sm:inline">•</span>
+            <span className="text-xs sm:text-sm text-red-200">{sharing ? 'Active' : 'Starting...'}</span>
           </button>
 
           {showDetails && (
@@ -470,14 +526,30 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
               </div>
 
               {error && (
-                <div className="bg-yellow-900/50 border border-yellow-600 rounded p-3 mb-3">
-                  <p className="text-sm text-yellow-100">{error}</p>
+                <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-400/30 rounded-xl p-4 mb-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 bg-amber-400/20 rounded-lg flex items-center justify-center">
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-amber-100 mb-1">Connection Issue</p>
+                      <p className="text-xs text-amber-200/70 leading-relaxed">Sharing hit a snag — use Try again, or ask your technician for help.</p>
+                    </div>
+                  </div>
                 </div>
               )}
 
               {!sharing && !error && (
-                <div className="bg-red-800 rounded p-3 mb-3">
-                  <p className="text-sm text-red-200">Starting screen share — please select the screen/window to share in the browser prompt.</p>
+                <div className="bg-blue-500/10 border border-blue-400/30 rounded-xl p-4 mb-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 bg-blue-400/20 rounded-lg flex items-center justify-center">
+                      <Monitor className="w-4 h-4 text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-blue-100 mb-0.5">Preparing screen share</p>
+                      <p className="text-xs text-blue-200/70">Select the screen or window to share in the browser prompt.</p>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -503,20 +575,77 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
         </div>
       </div>
 
-      <div className="fixed bottom-4 left-4 pointer-events-auto">
-        <div className="bg-white rounded-lg shadow-lg p-3 flex items-center gap-3">
-          <Shield className="w-5 h-5 text-green-600" />
-          <div className="text-sm">
+      <div className={`fixed bottom-4 left-4 pointer-events-auto ${isMobile ? 'right-4' : ''}`}>
+        <div className="bg-white rounded-lg shadow-lg p-2 sm:p-3 flex items-center gap-2 sm:gap-3">
+          <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
+          <div className="text-xs sm:text-sm">
             <div className="font-medium text-gray-900">Protected Session</div>
-            <div className="text-gray-500">You can end this session at any time</div>
+            <div className="text-gray-500">End anytime</div>
           </div>
         </div>
       </div>
 
-      {/* Hidden preview of captured stream for debugging - optional, removed in prod */}
+      {/* Friendly fallback only — details stay on the technician side. */}
       {error && (
         <div className="fixed bottom-20 left-4 right-4 pointer-events-auto">
-          <div className="bg-white border border-red-300 rounded-lg p-3 text-sm text-red-700">{error}</div>
+          <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-4 text-center">
+            <p className="text-sm text-gray-700 mb-3">Couldn't start sharing.</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="flex-1 py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg"
+              >
+                Try again
+              </button>
+              <button
+                type="button"
+                onClick={handleEnd}
+                className="flex-1 py-2 px-4 text-sm text-gray-500"
+              >
+                End session
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Still not sharing after several seconds: the OS/browser permission
+          prompt is waiting or was dismissed. Make it unmissable + retryable. */}
+      {!sharing && !error && stalled && (
+        <div className="fixed inset-0 pointer-events-auto flex items-center justify-center bg-black/60 p-4 z-50">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-6 text-center">
+            <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-3"></div>
+            <h2 className="text-base font-semibold text-gray-900 mb-2">Waiting for permission</h2>
+            {isMobile ? (
+              <p className="text-sm text-gray-600 mb-4">
+                Your phone shows a system popup after you tap Allow.
+                Choose <strong>Entire screen</strong>, then tap{' '}
+                <strong>Start recording</strong> / <strong>Start now</strong>.
+                Nothing appearing? Tap Try again.
+              </p>
+            ) : (
+              <p className="text-sm text-gray-600 mb-4">
+                Your browser shows a picker to choose what to share.
+                Select a screen or window, then click <strong>Share</strong>.
+                Nothing appearing? Tap Try again.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="w-full py-2.5 px-4 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={handleEnd}
+              className="w-full mt-2 py-2 px-4 text-sm text-gray-500 hover:text-gray-700"
+            >
+              End session
+            </button>
+          </div>
         </div>
       )}
     </div>

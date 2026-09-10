@@ -16,6 +16,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5174,
       host: true,
+      allowedHosts: true,
       proxy: {
         '/v1/auth': {
           target: authTarget,

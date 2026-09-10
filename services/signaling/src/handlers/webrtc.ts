@@ -59,8 +59,10 @@ export async function signalingHandler(
           clientRole = msg.type === 'offer' ? 'client' : 'technician';
         }
 
-        const clientId = `${sessionId}:${clientRole}:${Date.now()}`;
-        clients.set(clientId, { ws, sessionId, role: clientRole });
+        const sid: string = sessionId ?? targetSessionId;
+        sessionId = sid;
+        const clientId = `${sid}:${clientRole}:${Date.now()}`;
+        clients.set(clientId, { ws, sessionId: sid, role: clientRole });
 
         await redis.sadd(`${SESSION_PREFIX}${sessionId}`, clientId);
 

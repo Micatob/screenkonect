@@ -1,65 +1,133 @@
-# ScreenKonect — Run on Termius VPS (168.222.97.214)
+# ScreenKonect — Run on Termius VPS
 
-**Copy folder to VPS then run these 3 commands. Works on Ubuntu 22.04 / Debian 12 with Docker.**
+**Works on Ubuntu 22.04 / Debian 12 with Docker. Current VPS IP: `169.35.179.55`**
+(previous VPS was `168.222.97.214`)
+
+> **HTTP caveat (read first):** the dashboard, login, session-create and join
+> *pages* work fine over `http://169.35.179.55:8090` from anywhere. But
+> **browser screen capture is blocked on plain http** — a client opening the
+> VPS join link can join but can never share their screen (browser security,
+> no workaround). For real screen-share tests use the Tailscale Funnel
+> `https://` link from your PC. The VPS is for an always-on dashboard; to get
+> sharing through the VPS you need a domain + TLS (or Cloudflare Tunnel in
+> front of it).
+
+## First-Time Setup on VPS (paste whole block)
 
 ```bash
-# 1. Copy folder (from your PC via Termius SFTP or scp)
-# scp -r "C:\Users\Hermes\Desktop\screen konect" root@168.222.97.214:/opt/
-# Or use Termius SFTP drag the whole "screen konect" folder to /opt/screenkonect
+# SSH via Termius to your VPS as root
+ssh root@169.35.179.55
 
-# 2. SSH via Termius to 168.222.97.214
-ssh root@168.222.97.214
-cd /opt/screenkonect   # or wherever you put it
-
-# 3. One-time setup (if not already)
-# Install Docker + Compose plugin
-apt update && apt install -y docker.io docker-compose-plugin
+# Install Docker (one time) — official script, avoids missing-plugin errors
+docker --version || curl -fsSL https://get.docker.com | sh
 systemctl enable --now docker
-# Open firewall (8090 is the ONLY port you need — gateway handles all)
+
+# Open firewall (8090 is the ONLY app port; also open 8090 in your provider panel)
 ufw allow 8090/tcp
 ufw allow 22/tcp
-ufw enable
+ufw --force enable
 
-# 4. Set public URL (so join links are public, not localhost)
-cat > .env <<'EOF'
+# Get the code
+git clone https://github.com/Micatob/screenkonect.git /opt/screenkonect
+cd /opt/screenkonect
+git log --oneline -1
+
+# Fresh secrets + env (PUBLIC_URL controls what join links look like)
+export JWT_A=$(openssl rand -hex 32)
+export JWT_R=$(openssl rand -hex 32)
+cat > .env <<EOF
 DATABASE_URL=postgresql://screenkonect:screenkonect@postgres:5432/screenkonect
 REDIS_URL=redis://redis:6379
-JWT_ACCESS_SECRET=sk-dev-access-secret-key-change-in-production-32ch
-JWT_REFRESH_SECRET=sk-dev-refresh-secret-key-change-in-production-32
-CORS_ORIGINS=http://168.222.97.214:8090,http://localhost:8090
-PUBLIC_URL=http://168.222.97.214:8090
+JWT_ACCESS_SECRET=${JWT_A}
+JWT_REFRESH_SECRET=${JWT_R}
+PORT=3000
+HOST=0.0.0.0
+CORS_ORIGINS=http://169.35.179.55:8090
 SK_GATEWAY_PORT=8090
 SK_POSTGRES_PORT=5432
 SK_REDIS_PORT=6380
+PUBLIC_URL=http://169.35.179.55:8090
 LOG_LEVEL=info
 EOF
 
-# 5. Start (single-port gateway, 8 containers - audit/device removed for VPS)
+# Build images + start everything (postgres/redis first)
 docker compose -f deploy/docker-compose.yaml up -d --build
-docker compose -f deploy/docker-compose.yaml ps   # wait 40s for healthy (auth,session,signaling,postgres,redis,gateway + 2 vite)
-docker compose -f deploy/docker-compose.yaml logs -f gateway  # Ctrl+C after 200
+sleep 15
 
-# 6. Test
-curl http://168.222.97.214:8090 -I  # 200
-curl http://168.222.97.214:8090/v1/auth/login -X POST -H "Content-Type: application/json" -d '{"email":"you@screenkonect.local","password":"ScreenKonect123!"}'
+# dist/ is gitignored, so the VPS must compile it (one time + after pulls)
+docker compose -f deploy/docker-compose.yaml run --rm auth sh -c "npm run build -w @screenkonect/shared -w @screenkonect/config -w @screenkonect/db -w @screenkonect/auth -w @screenkonect/session -w @screenkonect/signaling && echo BUILT_OK"
+export VITE_PUBLIC_URL=http://169.35.179.55:8090
+docker compose -f deploy/docker-compose.yaml run --rm auth sh -c "npm run build -w @screenkonect/web-dashboard -w @screenkonect/client-consent-ui && echo APPS_BUILT_OK"
 
-# 7. Open in browser
-# http://168.222.97.214:8090
-# Login: you@screenkonect.local / ScreenKonect123!
-# New Session -> Copy link will be http://168.222.97.214:8090/join/<CODE>?token=... (public, share with anyone)
+# Restart backends onto compiled dist + gateway with static mounts
+docker compose -f deploy/docker-compose.yaml up -d --force-recreate auth session signaling gateway
+sleep 90
+docker compose -f deploy/docker-compose.yaml ps
+curl -s http://localhost:8090/healthz; echo
 
-# If you change .env (e.g., PUBLIC_URL), recreate: docker compose -f deploy/docker-compose.yaml up -d
-# Not `restart` — env vars only apply on recreate.
-
-# Stop: docker compose -f deploy/docker-compose.yaml down
-# Logs: docker compose -f deploy/docker-compose.yaml logs -f session
+# Technician account (fresh VPS database is empty — register once)
+curl -s -X POST http://localhost:8090/v1/auth/register -H 'Content-Type: application/json' -d '{"email":"you@screenkonect.local","password":"ScreenKonect123!","display_name":"Hermes"}'; echo
 ```
 
-**What was fixed to run on VPS:**
-- `PUBLIC_URL` env controls join links (`services/session/src/routes/sessions.ts:99`). Without it links were `localhost` and useless on VPS. Set to `http://168.222.97.214:8090` (or `https://your-domain` if you add TLS).
-- Gateway `deploy/Caddyfile` routes `/join/*` -> consent `5174`, `/ws` -> signaling `4002`, `/v1/*` -> `4000-4004`, `/` -> dashboard `5173`. Only `8090` needs firewall.
-- `deploy/docker-compose.yaml` `PUBLIC_URL` passed to `session` service. `CORS_ORIGINS` must include `http://168.222.97.214:8090`.
-- No Tailscale needed on VPS — public IP is direct. Keep `tailscale` funnel only for local PC testing.
-- Video fix: `base: '/join/'` avoids `/src/App.tsx` collision, `getDisplayMedia` uses `monitor` + `selfBrowserSurface:exclude`, data channels for remote control + file transfer, delete API `DELETE /v1/sessions`.
+Open in browser: `http://169.35.179.55:8090` — login `you@screenkonect.local` / `ScreenKonect123!`
 
-**If join shows "No routes matched" or black screen:** hard refresh `Ctrl+Shift+R` (Vite cache), wait 30s for `VITE ready`, ensure client picked `Entire Screen` (not Browser Tab) to see desktop when minimized.
+## Update existing VPS deploy (paste whole block)
+
+```bash
+cd /opt/screenkonect
+git pull
+git log --oneline -1
+
+# Recompile everything that changed (code comes via git, dist/ does not)
+docker compose -f deploy/docker-compose.yaml run --rm auth sh -c "npm run build -w @screenkonect/shared -w @screenkonect/config -w @screenkonect/db -w @screenkonect/auth -w @screenkonect/session -w @screenkonect/signaling && echo BUILT_OK"
+export VITE_PUBLIC_URL=http://169.35.179.55:8090
+docker compose -f deploy/docker-compose.yaml run --rm auth sh -c "npm run build -w @screenkonect/web-dashboard -w @screenkonect/client-consent-ui && echo APPS_BUILT_OK"
+
+# Recreate (frontend dist/ is picked up live, no rebuild of images needed)
+docker compose -f deploy/docker-compose.yaml up -d --force-recreate auth session signaling gateway
+sleep 60
+docker compose -f deploy/docker-compose.yaml ps
+curl -s http://localhost:8090/healthz; echo
+```
+
+## Test
+
+```bash
+curl http://169.35.179.55:8090 -I
+# Should return 200
+
+# Open in browser: http://169.35.179.55:8090
+# Login: you@screenkonect.local / ScreenKonect123!
+# New Session -> join link will be http://169.35.179.55:8090/join/CODE?token=...
+# (pages + join work; screen CAPTURE needs https — see caveat at top)
+```
+
+## Important Notes
+
+- `PUBLIC_URL` controls what join links look like. Without it, links say `localhost:8090` (useless over internet)
+- `docker compose restart` does NOT re-read `.env` or config changes — use `--force-recreate` instead
+- `docker compose run --rm auth sh -c "..."` runs one-off commands (used for builds because `dist/` is gitignored)
+- Frontend `dist/` is served live from disk — after rebuilding apps, just hard-refresh the browser (no container restart needed for frontend changes)
+- Share port 8090 only. Gateway routes everything: dashboard `/`, consent `/join/*`, APIs `/v1/*`, signaling `/ws`, downloads `/downloads/*`
+- Never commit `.env` (it holds JWT secrets)
+
+## Useful Commands
+
+```bash
+# Check status
+docker compose -f deploy/docker-compose.yaml ps
+
+# View logs (service names, not container names)
+docker compose -f deploy/docker-compose.yaml logs --tail 50 session
+docker compose -f deploy/docker-compose.yaml logs --tail 50 gateway
+docker compose -f deploy/docker-compose.yaml logs --tail 50 auth
+
+# Restart specific service
+docker compose -f deploy/docker-compose.yaml up -d --force-recreate session
+
+# Stop everything (data stays in postgres_data / redis_data volumes)
+docker compose -f deploy/docker-compose.yaml down
+
+# Enter a container
+docker compose -f deploy/docker-compose.yaml exec session sh
+```

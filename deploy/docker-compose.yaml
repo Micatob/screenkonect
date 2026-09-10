@@ -5,7 +5,6 @@ name: screenkonect
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: screenkonect-postgres
     environment:
       POSTGRES_USER: screenkonect
       POSTGRES_PASSWORD: screenkonect
@@ -23,7 +22,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: screenkonect-redis
     ports:
       - "${SK_REDIS_PORT:-6380}:6379"
     volumes:
@@ -39,7 +37,6 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.base
-    container_name: screenkonect-migrate
     working_dir: /app
     command: sh -c "sleep 5 && npm run db:migrate -w @screenkonect/db && echo 'migrations done'"
     environment:
@@ -56,9 +53,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.base
-    container_name: screenkonect-auth
     working_dir: /app
-    command: npm run dev -w services/auth
+    command: npm start -w services/auth
     ports:
       - "${SK_AUTH_PORT:-4000}:4000"
     environment:
@@ -90,9 +86,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.base
-    container_name: screenkonect-session
     working_dir: /app
-    command: npm run dev -w services/session
+    command: npm start -w services/session
     ports:
       - "${SK_SESSION_PORT:-4001}:4001"
     env_file:
@@ -101,7 +96,6 @@ services:
       PORT: 4001
       DATABASE_URL: postgresql://screenkonect:screenkonect@postgres:5432/screenkonect
       REDIS_URL: redis://redis:6379
-      PUBLIC_URL: ${PUBLIC_URL:-}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-in-production-min-32-chars}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-in-production-min-32-chars}
       NODE_ENV: development
@@ -127,9 +121,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.base
-    container_name: screenkonect-signaling
     working_dir: /app
-    command: npm run dev -w services/signaling
+    command: npm start -w services/signaling
     ports:
       - "${SK_SIGNALING_PORT:-4002}:4002"
     environment:
@@ -157,68 +150,19 @@ services:
       retries: 10
       start_period: 30s
 
-  web-dashboard:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.base
-    container_name: screenkonect-web-dashboard
-    working_dir: /app
-    command: npm run dev -w apps/web-dashboard
-    ports:
-      - "${SK_DASHBOARD_PORT:-5173}:5173"
-    environment:
-      VITE_API_TARGET: http://auth:4000
-      VITE_AUTH_TARGET: http://auth:4000
-      VITE_SESSION_TARGET: http://session:4001
-      VITE_SIGNALING_TARGET: ws://signaling:4002
-      NODE_ENV: development
-    volumes:
-      - ..:/app
-      - /app/node_modules
-    restart: unless-stopped
-    depends_on:
-      - auth
-      - session
-      - signaling
-
-  client-consent-ui:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.base
-    container_name: screenkonect-client-consent-ui
-    working_dir: /app
-    command: npm run dev -w apps/client-consent-ui
-    ports:
-      - "${SK_CONSENT_PORT:-5174}:5174"
-    environment:
-      VITE_API_TARGET: http://auth:4000
-      VITE_AUTH_TARGET: http://auth:4000
-      VITE_SESSION_TARGET: http://session:4001
-      VITE_SIGNALING_TARGET: ws://signaling:4002
-      NODE_ENV: development
-    volumes:
-      - ..:/app
-      - /app/node_modules
-    restart: unless-stopped
-    depends_on:
-      - auth
-      - session
-
   gateway:
     image: caddy:2-alpine
-    container_name: screenkonect-gateway
     ports:
       - "${SK_GATEWAY_PORT:-8090}:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./downloads:/srv/downloads:ro
+      # Prebuilt frontend dist (vite build) - served statically, no dev servers
+      - ../apps/web-dashboard/dist:/srv/dashboard:ro
+      - ../apps/client-consent-ui/dist:/srv/consent:ro
     restart: unless-stopped
-    depends_on:
-      - web-dashboard
-      - client-consent-ui
-      - signaling
-      - auth
-      - session
 
 volumes:
   postgres_data:

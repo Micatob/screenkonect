@@ -1004,22 +1004,22 @@ Tailscale creates a **private WireGuard network** + **public Funnel** on top of 
     # browser opens -> login with Google/GitHub/Microsoft
     ```
 3. Enable **Serve/Funnel** once (one click per tailnet):
-   - Visit `https://login.tailscale.com/admin/machines` -> your `desktop-a780de3` -> enable `Funnel` (or open the link `tailscale funnel` prints: `https://login.tailscale.com/f/funnel?node=...`)
+   - Visit `https://login.tailscale.com/admin/machines` -> your `screenkonect` -> enable `Funnel` (or open the link `tailscale funnel` prints: `https://login.tailscale.com/f/funnel?node=...`)
    - For private tailnet only (no public), enable `Serve` instead: `https://login.tailscale.com/f/serve?node=...`
 
 4. Expose single gateway (public internet, no port forward):
     ```powershell
     & "C:\Program Files\Tailscale\tailscale.exe" funnel --bg 8090
-    # prints: https://desktop-a780de3.tailXXXX.ts.net
+    # prints: https://screenkonect.tailXXXX.ts.net
     # check: & "C:\Program Files\Tailscale\tailscale.exe" funnel status
     ```
-    - You: `https://desktop-a780de3.tailXXXX.ts.net` (dashboard)
-    - Client: `https://desktop-a780de3.tailXXXX.ts.net/join/ABC123?token=xyz` (join link - dashboard generates with `8090` host, replace `localhost:8090` with funnel host)
+    - You: `https://screenkonect.tailXXXX.ts.net` (dashboard)
+    - Client: `https://screenkonect.tailXXXX.ts.net/join/ABC123?token=xyz` (join link - dashboard generates with `8090` host, replace `localhost:8090` with funnel host)
 
 5. Private tailnet only (client must be on your tailnet, more secure):
     ```powershell
     & "C:\Program Files\Tailscale\tailscale.exe" serve --bg 8090
-    # https://desktop-a780de3.tailXXXX.ts.net (tailnet only)
+    # https://screenkonect.tailXXXX.ts.net (tailnet only)
     ```
     Share via `Admin Console` -> `Machines` -> `Share` or invite client to tailnet.
 

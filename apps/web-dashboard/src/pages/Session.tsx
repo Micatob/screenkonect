@@ -12,6 +12,9 @@ export function Session() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [joinUrl, setJoinUrl] = useState('');
+  // Screen-share pipeline state: waiting (client hasn't published) ->
+  // connecting (offer/ICE in flight) -> live (frames rendering) / failed.
+  const [mediaState, setMediaState] = useState<'waiting' | 'connecting' | 'live' | 'failed'>('waiting');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -31,6 +34,7 @@ export function Session() {
 
   useEffect(() => {
     if (session?.status === 'active') {
+      setMediaState('waiting');
       connectSignaling();
     }
     return () => {
@@ -58,12 +62,12 @@ export function Session() {
         } else if (storedUrl) {
           setJoinUrl(storedUrl);
         } else if (storedToken) {
-          const reconstructed = `${window.location.origin}/join/${data.session.session_code}?token=${storedToken}`;
+          const baseUrl = import.meta.env.VITE_PUBLIC_URL || 'https://screenkonect.tail8a6c48.ts.net';
+          const reconstructed = `${baseUrl}/join/${data.session.session_code}?token=${storedToken}`;
           setJoinUrl(reconstructed);
         } else {
-          // No token available (already used or page reloaded after cleanup) - show code-only hint
-          // Still set a link without token so UI isn't blank; it will fail but technician knows code
-          setJoinUrl(`${window.location.origin}/join/${data.session.session_code}?token=`);
+          const baseUrl = import.meta.env.VITE_PUBLIC_URL || 'https://screenkonect.tail8a6c48.ts.net';
+          setJoinUrl(`${baseUrl}/join/${data.session.session_code}?token=`);
         }
       }
     } catch (err) {
@@ -114,6 +118,7 @@ export function Session() {
     if (msg.type === 'offer' && msg.payload) {
       try {
         console.log('[signaling] received offer');
+        setMediaState('connecting');
         // Clean previous PC if any
         if (pcRef.current) {
           try { pcRef.current.close(); } catch {}
@@ -126,6 +131,12 @@ export function Session() {
         let controlChannel: RTCDataChannel | null = null;
 
         (pc as any)._pendingCandidates = pendingRemoteCandidates;
+
+        pc.onconnectionstatechange = () => {
+          console.log('[webrtc] pc state', pc.connectionState);
+          if (pc.connectionState === 'connected') setMediaState('live');
+          else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') setMediaState('failed');
+        };
 
         // Create control data channel (technician -> client)
         if (session?.permissions?.control) {
@@ -164,7 +175,6 @@ export function Session() {
         };
 
         const attachStream = (stream: MediaStream) => {
-          // Ensure video track is enabled and not ended
           const vTracks = stream.getVideoTracks();
           console.log('[webrtc] video tracks', vTracks.length, vTracks[0]?.readyState, vTracks[0]?.enabled);
           if (vTracks.length === 0) {
@@ -175,43 +185,51 @@ export function Session() {
             console.warn('[webrtc] video track ended');
             return;
           }
-          // Lock display to one: use first track only, disable others to avoid mirror
+          setMediaState('live');
           vTracks.slice(1).forEach(t => { t.enabled = false; t.stop(); });
-          let video = document.getElementById('remote-video') as HTMLVideoElement | null;
-          if (!video) {
-            video = document.createElement('video');
-            video.id = 'remote-video';
-            video.autoplay = true;
-            (video as any).playsInline = true;
-            video.muted = true;
-            video.controls = false;
-            video.style.width = '100%';
-            video.style.height = '100%';
-            video.style.objectFit = 'contain';
-            video.style.background = 'black';
-            // Fix for Firefox: ensure video is not mirrored
-            video.style.transform = 'none';
+
+          const doAttach = () => {
+            let video = document.getElementById('remote-video') as HTMLVideoElement | null;
+            if (!video) {
+              video = document.createElement('video');
+              video.id = 'remote-video';
+              video.autoplay = true;
+              (video as any).playsInline = true;
+              video.muted = true;
+              video.controls = false;
+              video.style.width = '100%';
+              video.style.height = '100%';
+              video.style.objectFit = 'contain';
+              video.style.background = 'black';
+              video.style.transform = 'none';
+              video.style.position = 'absolute';
+              video.style.top = '0';
+              video.style.left = '0';
+            }
             const container = document.getElementById('remote-screen');
-            if (container) {
+            if (!container) {
+              console.warn('[webrtc] #remote-screen not in DOM yet, retrying in 200ms');
+              setTimeout(doAttach, 200);
+              return;
+            }
+            if (!container.contains(video)) {
               container.innerHTML = '';
               container.appendChild(video);
-              // Attach input handlers for remote control
               if (session?.permissions?.control) {
                 attachControlHandlers(video, pc);
               }
             }
-          }
-          (video as HTMLVideoElement).srcObject = stream;
-          // Ensure video actually plays (handle browser autoplay)
-          const playPromise = (video as HTMLVideoElement).play();
-          if (playPromise) playPromise.catch((e) => {
-            console.warn('[webrtc] play failed, trying muted play', e);
-            (video as HTMLVideoElement).muted = true;
-            (video as HTMLVideoElement).play().catch(()=>{});
-          });
-          // Remove any black screen placeholder
-          const placeholder = document.getElementById('remote-placeholder');
-          if (placeholder) placeholder.remove();
+            (video as HTMLVideoElement).srcObject = stream;
+            const playPromise = (video as HTMLVideoElement).play();
+            if (playPromise) playPromise.catch((e) => {
+              console.warn('[webrtc] play failed, retrying muted', e);
+              (video as HTMLVideoElement).muted = true;
+              (video as HTMLVideoElement).play().catch(()=>{});
+            });
+            const placeholder = document.getElementById('remote-placeholder');
+            if (placeholder) placeholder.remove();
+          };
+          doAttach();
         };
 
         const attachControlHandlers = (video: HTMLVideoElement, pc: RTCPeerConnection) => {
@@ -469,6 +487,12 @@ export function Session() {
         {session.status === 'active' && (
           <div className="flex gap-4">
             <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-700 text-xs">
+                <span className={`w-2 h-2 rounded-full ${mediaState === 'live' ? 'bg-green-400' : mediaState === 'failed' ? 'bg-red-400' : mediaState === 'connecting' ? 'bg-yellow-400 animate-pulse' : 'bg-gray-500 animate-pulse'}`} />
+                <span className="text-gray-300">
+                  {mediaState === 'live' ? 'Live' : mediaState === 'connecting' ? 'Connecting to client…' : mediaState === 'failed' ? 'Connection failed — ask the client to tap Try again or rejoin with a fresh link' : 'Waiting for client to start sharing… (they must open the https join link in Chrome, tap Allow, then complete the system permission prompt)'}
+                </span>
+              </div>
               <div
                 id="remote-screen"
                 className="w-full aspect-video bg-black flex items-center justify-center relative"

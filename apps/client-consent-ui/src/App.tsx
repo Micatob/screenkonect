@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ConsentScreen } from './ConsentScreen';
 import { SessionIndicator } from './SessionIndicator';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 
 type AppState = 'loading' | 'consent' | 'active' | 'error' | 'ended';
 
@@ -58,8 +59,8 @@ export default function App() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to join session');
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Server returned ${res.status}`);
       }
 
       const data = await res.json();
@@ -76,7 +77,15 @@ export default function App() {
         setState('consent');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to join session');
+      if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        setError(
+          'Unable to connect to the server.\n' +
+          'The support link may have expired, or the server is not reachable from your network.\n' +
+          'Ask your technician for a new link, or check that the server is running.'
+        );
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to join session');
+      }
       setState('error');
     }
   };
@@ -149,8 +158,10 @@ export default function App() {
     }
   };
 
-  const detectPlatform = (): 'windows' | 'macos' | 'linux' => {
+  const detectPlatform = (): 'windows' | 'macos' | 'linux' | 'android' | 'ios' => {
     const ua = navigator.userAgent.toLowerCase();
+    if (ua.includes('android')) return 'android';
+    if (ua.includes('iphone') || ua.includes('ipad')) return 'ios';
     if (ua.includes('win')) return 'windows';
     if (ua.includes('mac')) return 'macos';
     return 'linux';
@@ -167,15 +178,60 @@ export default function App() {
     );
   }
 
-  if (state === 'error') {
+  if (state === 'consent' && session) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center max-w-md p-8 bg-white rounded-lg shadow">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">✕</span>
+      <ConsentScreen
+        sessionId={session.id}
+        durationMinutes={session.max_duration_minutes || 60}
+        onApprove={handleApprove}
+        onReject={handleReject}
+      />
+    );
+  }
+
+  if (state === 'active' && session) {
+    return (
+      <SessionIndicator
+        sessionId={session.id}
+        permissions={session.permissions}
+        shareTarget={shareTarget}
+        onEndSession={handleEndSession}
+      />
+    );
+  }
+
+  if (state === 'error') {
+    const lines = error?.split('\n').filter(s => s.trim()) || [];
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
+        <div className="w-full max-w-sm">
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="bg-gradient-to-r from-red-500 to-red-600 p-6 text-center">
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3 backdrop-blur-sm">
+                <AlertCircle className="w-7 h-7 text-white" />
+              </div>
+              <h1 className="text-lg font-semibold text-white">Connection Error</h1>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-2 mb-5">
+                {lines.map((line, i) => (
+                  <p key={i} className="text-sm text-gray-600 leading-relaxed">
+                    {line}
+                  </p>
+                ))}
+              </div>
+
+              <button
+                onClick={() => window.location.reload()}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Try again
+              </button>
+            </div>
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Connection Error</h1>
-          <p className="text-gray-600">{error}</p>
         </div>
       </div>
     );

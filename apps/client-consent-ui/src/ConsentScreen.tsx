@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Video, Camera, Mic, Volume2, Clock, Monitor } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Video, Camera, Mic, Volume2, Clock, Monitor, Download } from 'lucide-react';
 
 interface ConsentScreenProps {
   sessionId: string;
@@ -32,6 +32,16 @@ export function ConsentScreen({ durationMinutes = 60, onApprove }: ConsentScreen
   });
   const [shareTarget, setShareTarget] = useState<'monitor' | 'window' | 'browser'>('monitor');
   const [approving, setApproving] = useState(false);
+  const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null);
+
+  const isMobile = /android|iphone|ipad|iPod/i.test(navigator.userAgent);
+
+  // Check if agent binary is available for download
+  useEffect(() => {
+    fetch('/downloads/screenkonect-agent.exe', { method: 'HEAD' })
+      .then((res) => setAgentAvailable(res.ok))
+      .catch(() => setAgentAvailable(false));
+  }, []);
 
   const handleApprove = async () => {
     if (approving) return;
@@ -106,19 +116,35 @@ export function ConsentScreen({ durationMinutes = 60, onApprove }: ConsentScreen
               />
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
-              <h4 className="font-medium text-blue-900 text-sm mb-2">What to share (avoids mirror loop):</h4>
-              <div className="grid grid-cols-3 gap-2">
-                {(['monitor','window','browser'] as const).map((t) => (
-                  <button key={t} onClick={() => setShareTarget(t)} className={`p-2 rounded border text-xs ${shareTarget===t?'bg-blue-600 text-white border-blue-600':'bg-white border-gray-200'}`}>
-                    {t==='monitor'?'Entire Screen':t==='window'?'Window':'Browser Tab'}
-                  </button>
-                ))}
+            {!isMobile && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
+                <h4 className="font-medium text-blue-900 text-sm mb-2">What to share (avoids mirror loop):</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['monitor','window','browser'] as const).map((t) => (
+                    <button key={t} onClick={() => setShareTarget(t)} className={`p-2 rounded border text-xs ${shareTarget===t?'bg-blue-600 text-white border-blue-600':'bg-white border-gray-200'}`}>
+                      {t==='monitor'?'Entire Screen':t==='window'?'Window':'Browser Tab'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-blue-700 mt-2">
+                  {shareTarget==='monitor'?'Shares whole desktop — minimizing browser will show desktop. Best for full help. If testing on same PC, use Window to avoid mirror.':'Shares only selected window/tab — minimizing will show black. Use Entire Screen for desktop.'}
+                </p>
               </div>
-              <p className="text-xs text-blue-700 mt-2">
-                {shareTarget==='monitor'?'Shares whole desktop — minimizing browser will show desktop. Best for full help. If testing on same PC, use Window to avoid mirror.':'Shares only selected window/tab — minimizing will show black. Use Entire Screen for desktop.'}
-              </p>
-            </div>
+            )}
+
+            {isMobile && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
+                <h4 className="font-medium text-blue-900 text-sm mb-2">Mobile screen sharing</h4>
+                <p className="text-xs text-blue-700">
+                  When you tap "Allow access", your phone will ask you to choose what to share.
+                  Select <strong>"Entire screen"</strong> for full desktop help, or
+                  select <strong>"Chrome tab"</strong> to share just this browser tab.
+                </p>
+                <p className="text-xs text-blue-600 mt-2">
+                  Android 10+ supports full screen sharing in Chrome. If prompted, tap "Start recording" to begin.
+                </p>
+              </div>
+            )}
 
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
               <p className="text-sm text-gray-600">
@@ -128,28 +154,55 @@ export function ConsentScreen({ durationMinutes = 60, onApprove }: ConsentScreen
               </p>
             </div>
 
-            <div className="bg-gray-900 rounded-lg p-4 mb-6">
-              <h4 className="font-medium text-white text-sm mb-1">Need full desktop help?</h4>
-              <p className="text-xs text-gray-400 mb-3">
-                This page can only share this browser tab. For the technician to see and control
-                your whole desktop, run the one-click agent:
-              </p>
-              <ol className="text-xs text-gray-300 list-decimal list-inside space-y-1 mb-3">
-                <li>Download <span className="font-mono">screenkonect-agent.exe</span> below</li>
-                <li>Double-click it, paste your join link when asked</li>
-                <li>Keep this page open until the technician connects</li>
-              </ol>
-              <a
-                href="/downloads/screenkonect-agent.exe"
-                download="screenkonect-agent.exe"
-                className="block text-center py-2 px-4 bg-white text-gray-900 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Download Windows agent
-              </a>
-              <p className="text-xs text-gray-500 mt-2">
-                After downloading, double-click the file (Windows may ask "Unknown publisher" - click More info / Run anyway), paste your join link, and keep this page open.
-              </p>
-            </div>
+            {!isMobile && agentAvailable !== false && (
+              <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-5 mb-6">
+                <h4 className="font-semibold text-white text-sm mb-1">Need full desktop help?</h4>
+                <p className="text-xs text-gray-400 mb-4">
+                  This page shares your browser tab only. For full desktop control, run the agent:
+                </p>
+
+                <div className="space-y-2.5 mb-4">
+                  {[
+                    { num: 1, text: 'Download the agent below' },
+                    { num: 2, text: 'Double-click and paste your join link' },
+                    { num: 3, text: 'Keep this page open' },
+                  ].map(({ num, text }) => (
+                    <div key={num} className="flex items-center gap-3">
+                      <span className="flex-shrink-0 w-6 h-6 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center text-xs font-bold">
+                        {num}
+                      </span>
+                      <span className="text-xs text-gray-300">{text}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <a
+                  href="/downloads/screenkonect-agent.exe"
+                  download="screenkonect-agent.exe"
+                  className="flex items-center justify-center gap-2.5 w-full py-2.5 px-4 bg-white text-gray-900 text-sm font-medium rounded-xl hover:bg-gray-100 active:scale-[0.98] transition-all"
+                >
+                  <Download className="w-4 h-4" />
+                  {agentAvailable === null ? 'Checking...' : 'Download Windows agent'}
+                </a>
+
+                <p className="text-[11px] text-gray-500 mt-3 leading-relaxed">
+                  Windows may warn "Unknown publisher" — click More info, then Run anyway.
+                </p>
+              </div>
+            )}
+
+            {isMobile && (
+              <div className="bg-gray-900 rounded-lg p-4 mb-6">
+                <h4 className="font-medium text-white text-sm mb-1">Tip: Add to Home Screen</h4>
+                <p className="text-xs text-gray-400 mb-2">
+                  For easier access next time, tap the browser menu (⋮) and select
+                  "Add to Home Screen" to install this as an app on your phone.
+                </p>
+                <p className="text-xs text-gray-500">
+                  Full screen sharing works on Android 10+ with Chrome. You can share your entire phone screen or just the browser tab.
+                </p>
+              </div>
+            )}
 
             <div className="flex gap-3">
               <button
