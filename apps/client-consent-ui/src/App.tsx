@@ -27,7 +27,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [shareTarget, setShareTarget] = useState<'monitor' | 'window' | 'browser'>('monitor');
 
+  // Mobile browsers cannot share their screen here (iOS Safari has no screen
+  // capture API at all; Android in-app browsers behave the same). Block early
+  // with a clear message instead of a broken flow.
+  const isMobileDevice = /android|iphone|ipad|iPod/i.test(navigator.userAgent);
+
   useEffect(() => {
+    if (isMobileDevice) return;
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
     // Join URL format is /join/<CODE>?token=xxx - code is in pathname, not query
@@ -166,6 +172,32 @@ export default function App() {
     if (ua.includes('mac')) return 'macos';
     return 'linux';
   };
+
+  if (isMobileDevice) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
+        <div className="w-full max-w-sm">
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-center">
+              <h1 className="text-lg font-semibold text-white">Computer required</h1>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600 leading-relaxed mb-3">
+                Screen sharing doesn't work from phones or tablets. Please open
+                this same link in <strong>Chrome or Edge on a Windows, Mac or
+                Linux computer</strong>.
+              </p>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Copy the link from your messages and paste it into the computer's
+                browser address bar, then come back here — or ask your technician
+                for help another way.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (state === 'loading') {
     return (

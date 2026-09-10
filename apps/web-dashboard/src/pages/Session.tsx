@@ -138,27 +138,40 @@ export function Session() {
           else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') setMediaState('failed');
         };
 
-        // Create control data channel (technician -> client)
+        // Create data channels (technician -> client) BEFORE the answer so they
+        // are part of the initial negotiation. Creating one later would need
+        // a re-offer, which the client does not handle — it would stay dead.
         if (session?.permissions?.control) {
           try {
             controlChannel = pc.createDataChannel('control', { ordered: true });
             controlChannel.onopen = () => console.log('[control] data channel open');
             controlChannel.onclose = () => console.log('[control] data channel closed');
             (pc as any)._controlChannel = controlChannel;
-            // Also handle clipboard channel from client
-            pc.ondatachannel = (ev) => {
-              if (ev.channel.label === 'clipboard') {
-                ev.channel.onmessage = (e) => {
-                  try {
-                    const msg = JSON.parse(e.data);
-                    if (msg.type === 'clipboard' && msg.text) {
-                      navigator.clipboard.writeText(msg.text).catch(()=>{});
-                    }
-                  } catch {}
-                };
-              }
-            };
           } catch (e) { console.warn('[control] createDataChannel failed', e); }
+        }
+        if (session?.permissions?.file_transfer) {
+          try {
+            const fileChannel = pc.createDataChannel('file', { ordered: true });
+            (pc as any)._fileChannel = fileChannel;
+            fileChannel.onopen = () => console.log('[file] data channel open');
+            fileChannel.onclose = () => console.log('[file] data channel closed');
+          } catch (e) { console.warn('[file] createDataChannel failed', e); }
+        }
+        // Clipboard messages arrive on a client-created channel; listen for
+        // them whenever control or clipboard permission is on.
+        if (session?.permissions?.control || session?.permissions?.clipboard) {
+          pc.ondatachannel = (ev) => {
+            if (ev.channel.label === 'clipboard') {
+              ev.channel.onmessage = (e) => {
+                try {
+                  const msg = JSON.parse(e.data);
+                  if (msg.type === 'clipboard' && msg.text) {
+                    navigator.clipboard.writeText(msg.text).catch(()=>{});
+                  }
+                } catch {}
+              };
+            }
+          };
         }
 
         pc.ontrack = (event) => {
