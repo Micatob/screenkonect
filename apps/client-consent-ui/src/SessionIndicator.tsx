@@ -29,8 +29,6 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
   const micRef = useRef<MediaStream | null>(null);
   const camRef = useRef<MediaStream | null>(null);
 
-  const isMobile = /android|iphone|ipad|iPod/i.test(navigator.userAgent);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -51,26 +49,9 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
           );
         }
 
-        // Android Chrome doesn't support displaySurface/selfBrowserSurface constraints
-        // Use simple constraints on mobile, full constraints on desktop
+        // Desktop capture: shareTarget avoids mirror loop and picks the surface.
         let stream: MediaStream;
-        if (isMobile) {
-          // Mobile: simple constraints (Android Chrome supports getDisplayMedia for entire screen on Android 10+)
-          try {
-            stream = await navigator.mediaDevices.getDisplayMedia({
-              video: true,
-              audio: permissions.audio,
-            } as any);
-          } catch (e: any) {
-            if (e?.name === 'AbortError' || e?.name === 'NotAllowedError') {
-              throw e;
-            }
-            // Fallback: try without audio
-            stream = await navigator.mediaDevices.getDisplayMedia({
-              video: true,
-            } as any);
-          }
-        } else {
+        {
           // Desktop: use shareTarget to avoid mirror loop and ensure correct capture
           // monitor = entire screen (desktop), window = single window, browser = tab
           // selfBrowserSurface: exclude avoids capturing the consent tab itself (prevents mirror)
@@ -463,11 +444,11 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
 
   return (
     <div className="fixed inset-0 pointer-events-none">
-      <div className={`fixed top-4 right-4 pointer-events-auto ${isMobile ? 'left-4' : ''}`}>
+      <div className="fixed top-4 right-4 pointer-events-auto">
         <div className="bg-red-600 text-white rounded-lg shadow-lg overflow-hidden">
           <button
             onClick={() => setShowDetails(!showDetails)}
-            className={`flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-3 w-full hover:bg-red-700 transition-colors ${isMobile ? 'text-sm' : ''}`}
+            className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-3 w-full hover:bg-red-700 transition-colors"
           >
             <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
             <Monitor className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -575,7 +556,7 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
         </div>
       </div>
 
-      <div className={`fixed bottom-4 left-4 pointer-events-auto ${isMobile ? 'right-4' : ''}`}>
+      <div className="fixed bottom-4 left-4 pointer-events-auto">
         <div className="bg-white rounded-lg shadow-lg p-2 sm:p-3 flex items-center gap-2 sm:gap-3">
           <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
           <div className="text-xs sm:text-sm">
@@ -617,20 +598,11 @@ export function SessionIndicator({ sessionId, permissions, shareTarget = 'monito
           <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-6 text-center">
             <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-3"></div>
             <h2 className="text-base font-semibold text-gray-900 mb-2">Waiting for permission</h2>
-            {isMobile ? (
-              <p className="text-sm text-gray-600 mb-4">
-                Your phone shows a system popup after you tap Allow.
-                Choose <strong>Entire screen</strong>, then tap{' '}
-                <strong>Start recording</strong> / <strong>Start now</strong>.
-                Nothing appearing? Tap Try again.
-              </p>
-            ) : (
-              <p className="text-sm text-gray-600 mb-4">
-                Your browser shows a picker to choose what to share.
-                Select a screen or window, then click <strong>Share</strong>.
-                Nothing appearing? Tap Try again.
-              </p>
-            )}
+            <p className="text-sm text-gray-600 mb-4">
+              Your browser shows a picker to choose what to share.
+              Select a screen or window, then click <strong>Share</strong>.
+              Nothing appearing? Tap Try again.
+            </p>
             <button
               type="button"
               onClick={handleRetry}

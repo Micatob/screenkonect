@@ -18,7 +18,7 @@ const CreateSessionSchema = z.object({
 
 const JoinSessionSchema = z.object({
   token: z.string(),
-  platform: z.enum(['windows', 'macos', 'linux', 'android', 'ios']),
+  platform: z.enum(['windows', 'macos', 'linux']),
   device_name: z.string().optional(),
   device_id: z.string().uuid().optional(),
   hostname: z.string().optional(),

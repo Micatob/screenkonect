@@ -164,10 +164,8 @@ export default function App() {
     }
   };
 
-  const detectPlatform = (): 'windows' | 'macos' | 'linux' | 'android' | 'ios' => {
+  const detectPlatform = (): 'windows' | 'macos' | 'linux' => {
     const ua = navigator.userAgent.toLowerCase();
-    if (ua.includes('android')) return 'android';
-    if (ua.includes('iphone') || ua.includes('ipad')) return 'ios';
     if (ua.includes('win')) return 'windows';
     if (ua.includes('mac')) return 'macos';
     return 'linux';

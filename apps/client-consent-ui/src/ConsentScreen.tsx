@@ -34,8 +34,6 @@ export function ConsentScreen({ durationMinutes = 60, onApprove }: ConsentScreen
   const [approving, setApproving] = useState(false);
   const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null);
 
-  const isMobile = /android|iphone|ipad|iPod/i.test(navigator.userAgent);
-
   // Check if agent binary is available for download
   useEffect(() => {
     fetch('/downloads/screenkonect-agent.exe', { method: 'HEAD' })
@@ -100,35 +98,19 @@ export function ConsentScreen({ durationMinutes = 60, onApprove }: ConsentScreen
               />
             </div>
 
-            {!isMobile && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
-                <h4 className="font-medium text-blue-900 text-sm mb-2">What to share (avoids mirror loop):</h4>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['monitor','window','browser'] as const).map((t) => (
-                    <button key={t} onClick={() => setShareTarget(t)} className={`p-2 rounded border text-xs ${shareTarget===t?'bg-blue-600 text-white border-blue-600':'bg-white border-gray-200'}`}>
-                      {t==='monitor'?'Entire Screen':t==='window'?'Window':'Browser Tab'}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-blue-700 mt-2">
-                  {shareTarget==='monitor'?'Shares whole desktop — minimizing browser will show desktop. Best for full help. If testing on same PC, use Window to avoid mirror.':'Shares only selected window/tab — minimizing will show black. Use Entire Screen for desktop.'}
-                </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
+              <h4 className="font-medium text-blue-900 text-sm mb-2">What to share (avoids mirror loop):</h4>
+              <div className="grid grid-cols-3 gap-2">
+                {(['monitor','window','browser'] as const).map((t) => (
+                  <button key={t} onClick={() => setShareTarget(t)} className={`p-2 rounded border text-xs ${shareTarget===t?'bg-blue-600 text-white border-blue-600':'bg-white border-gray-200'}`}>
+                    {t==='monitor'?'Entire Screen':t==='window'?'Window':'Browser Tab'}
+                  </button>
+                ))}
               </div>
-            )}
-
-            {isMobile && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
-                <h4 className="font-medium text-blue-900 text-sm mb-2">Mobile screen sharing</h4>
-                <p className="text-xs text-blue-700">
-                  When you tap "Allow access", your phone will ask you to choose what to share.
-                  Select <strong>"Entire screen"</strong> for full desktop help, or
-                  select <strong>"Chrome tab"</strong> to share just this browser tab.
-                </p>
-                <p className="text-xs text-blue-600 mt-2">
-                  Android 10+ supports full screen sharing in Chrome. If prompted, tap "Start recording" to begin.
-                </p>
-              </div>
-            )}
+              <p className="text-xs text-blue-700 mt-2">
+                {shareTarget==='monitor'?'Shares whole desktop — minimizing browser will show desktop. Best for full help. If testing on same PC, use Window to avoid mirror.':'Shares only selected window/tab — minimizing will show black. Use Entire Screen for desktop.'}
+              </p>
+            </div>
 
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
               <p className="text-sm text-gray-600">
@@ -138,7 +120,7 @@ export function ConsentScreen({ durationMinutes = 60, onApprove }: ConsentScreen
               </p>
             </div>
 
-            {!isMobile && agentAvailable !== false && (
+            {agentAvailable !== false && (
               <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-5 mb-6">
                 <h4 className="font-semibold text-white text-sm mb-1">Need full desktop help?</h4>
                 <p className="text-xs text-gray-400 mb-4">
@@ -171,19 +153,6 @@ export function ConsentScreen({ durationMinutes = 60, onApprove }: ConsentScreen
 
                 <p className="text-[11px] text-gray-500 mt-3 leading-relaxed">
                   Windows may warn "Unknown publisher" — click More info, then Run anyway.
-                </p>
-              </div>
-            )}
-
-            {isMobile && (
-              <div className="bg-gray-900 rounded-lg p-4 mb-6">
-                <h4 className="font-medium text-white text-sm mb-1">Tip: Add to Home Screen</h4>
-                <p className="text-xs text-gray-400 mb-2">
-                  For easier access next time, tap the browser menu (⋮) and select
-                  "Add to Home Screen" to install this as an app on your phone.
-                </p>
-                <p className="text-xs text-gray-500">
-                  Full screen sharing works on Android 10+ with Chrome. You can share your entire phone screen or just the browser tab.
                 </p>
               </div>
             )}
