@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Video, Camera, Mic, Volume2, Clock, Monitor, Download } from 'lucide-react';
+import { Video, Camera, Mic, Volume2, Clock, Download } from 'lucide-react';
 
 interface ConsentScreenProps {
   sessionId: string;
@@ -57,12 +57,6 @@ export function ConsentScreen({ durationMinutes = 60, onApprove }: ConsentScreen
     setPermissions((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const extrasOn = [
-    permissions.camera && 'camera',
-    permissions.mic && 'mic',
-    permissions.audio && 'audio',
-  ].filter(Boolean).join(', ');
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-lg">
@@ -78,16 +72,6 @@ export function ConsentScreen({ durationMinutes = 60, onApprove }: ConsentScreen
               <Clock className="w-5 h-5 text-gray-500 shrink-0" />
               <p className="text-sm text-gray-700">
                 Duration <strong>{durationMinutes} minutes</strong>
-              </p>
-            </div>
-
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-yellow-700 flex items-start gap-2">
-                <Monitor className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>
-                  Screen, control, clipboard &amp; files are shared automatically
-                  {extrasOn ? `, plus ${extrasOn}` : ''}.
-                </span>
               </p>
             </div>
 
