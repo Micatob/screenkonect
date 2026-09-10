@@ -1,4 +1,6 @@
-:80 {
+# Shared site config: API + static frontends + downloads.
+# Served plain on :80 and (optionally) with automatic HTTPS on your domain.
+(common) {
 	# Health check endpoint (for monitoring / Tailscale funnel verification)
 	handle /healthz {
 		respond "ok" 200
@@ -32,17 +34,7 @@
 		reverse_proxy auth:4000
 	}
 
-	# 3. Link Recon - public tracking link (host service on 8092).
-	# Only /r + /collect go public via funnel. Dashboard stays local-only
-	# on http://127.0.0.1:8092/ so collected sessions are not exposed.
-	handle /r* {
-		reverse_proxy host.docker.internal:8092
-	}
-	handle /collect* {
-		reverse_proxy host.docker.internal:8092
-	}
-
-	# 4. Client consent UI - prebuilt static files (vite base '/join/').
+	# 3. Client consent UI - prebuilt static files (vite base '/join/').
 	# No dev server, no HMR, no cookies: assets live under /join/* by construction.
 	handle /join/* {
 		root * /srv/consent
@@ -73,3 +65,20 @@
 		format console
 	}
 }
+
+# Plain HTTP (local use, VPS IP use, Tailscale funnel feeds into this)
+:80 {
+	import common
+}
+
+# ----- Public domain with automatic HTTPS (optional, recommended for VPS) -----
+# 1. Create a DNS A record: your-domain -> your VPS public IP.
+# 2. Uncomment the 3 lines below and put your real domain in place of
+#    sk-join.example.com (in this file AND in .env PUBLIC_URL=https://...).
+# 3. Make sure ports 80 + 443 are open (provider panel + ufw).
+# 4. Recreate gateway + session. Caddy fetches a free Let's Encrypt cert.
+#    Join links become https://your-domain/join/CODE?token=... and client
+#    screen capture works (browsers require https).
+#sk-join.example.com {
+#	import common
+#}

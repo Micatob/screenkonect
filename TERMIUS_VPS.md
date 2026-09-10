@@ -18,9 +18,12 @@
 # SSH via Termius to your VPS as root
 ssh root@169.35.179.55
 
-# Install Docker (one time) — official script, avoids missing-plugin errors
-docker --version || curl -fsSL https://get.docker.com | sh
+# Install Docker (one time) — official script, avoids missing-plugin errors.
+# NOTE: bare Debian templates ship with no curl/git/ufw — install those first.
+apt-get update && apt-get install -y ca-certificates curl git openssl ufw
+curl -fsSL https://get.docker.com | sh
 systemctl enable --now docker
+docker --version
 
 # Open firewall (8090 is the ONLY app port; also open 8090 in your provider panel)
 ufw allow 8090/tcp
@@ -89,6 +92,35 @@ sleep 60
 docker compose -f deploy/docker-compose.yaml ps
 curl -s http://localhost:8090/healthz; echo
 ```
+
+## Public domain with automatic HTTPS (recommended — enables screen sharing)
+
+Plain `http://IP:8090` links load pages but browsers block screen capture on
+http. With a domain, Caddy fetches a free Let's Encrypt cert and join links
+become `https://your-domain/join/CODE?token=...` — full sharing works.
+
+```bash
+# 1. DNS: create an A record  your-domain -> 169.35.179.55  (at your registrar)
+# 2. Open ports 80 + 443 (provider panel + VPS):
+ufw allow 80/tcp; ufw allow 443/tcp
+
+# 3. On the VPS, enable the domain block in deploy/Caddyfile:
+#    uncomment the last 3 lines and replace sk-join.example.com
+sed -i 's/^#sk-join.example.com {/<YOUR-DOMAIN> {/; s/^#\timport common/\timport common/; s/^#}/}/' deploy/Caddyfile
+grep -A2 'example\|<YOUR-DOMAIN>' deploy/Caddyfile | head -5
+#    NOTE: verify with: grep -B1 -A1 'import common' deploy/Caddyfile
+#    you should see "<YOUR-DOMAIN> {" ... "import common" ... "}"
+
+# 4. Point PUBLIC_URL at https and recreate gateway + session:
+sed -i 's|^PUBLIC_URL=.*|PUBLIC_URL=https://<YOUR-DOMAIN>|' .env
+docker compose -f deploy/docker-compose.yaml up -d --force-recreate gateway session
+sleep 20
+curl -s https://<YOUR-DOMAIN>/healthz; echo
+```
+
+Replace `<YOUR-DOMAIN>` with the real domain in every line. First cert issue
+takes ~30s. If `https://` doesn't answer, ports 80/443 are still closed at
+the provider — same fix as 8090 was.
 
 ## Test
 

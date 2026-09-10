@@ -154,6 +154,10 @@ services:
     image: caddy:2-alpine
     ports:
       - "${SK_GATEWAY_PORT:-8090}:80"
+      # Standard web ports for optional public-domain HTTPS (see Caddyfile).
+      # Harmless if unused; required for Let's Encrypt when a domain is set.
+      - "80:80"
+      - "443:443"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -162,8 +166,11 @@ services:
       # Prebuilt frontend dist (vite build) - served statically, no dev servers
       - ../apps/web-dashboard/dist:/srv/dashboard:ro
       - ../apps/client-consent-ui/dist:/srv/consent:ro
+      # Persist ACME certs across recreates (avoids rate limits)
+      - caddy_data:/data
     restart: unless-stopped
 
 volumes:
   postgres_data:
   redis_data:
+  caddy_data:

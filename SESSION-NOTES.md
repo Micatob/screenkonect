@@ -383,7 +383,16 @@ Files changed 2026-09-07:
   Copy join link (= funnel https), open on Android in Chrome (not WhatsApp
   in-app browser), Allow, then complete Android system sheets.
 
-## Session 2026-09-09 - signaling proven OK; phone errors removed (DONE)
+## Session 2026-09-10 - new VPS 169.35.179.55 deployed (WORKING)
+
+- Bare Debian 12 template had zero tooling — added apt prereq step
+  (`ca-certificates curl git openssl ufw`) before get.docker.com.
+- Deployed `95f9d37`: images built, all dists compiled on VPS, 7/7 up,
+  postgres/redis/auth/session/signaling healthy, `healthz ok`, tech account
+  registered via API. Dashboard: `http://169.35.179.55:8090`.
+- Reminder: VPS link is plain http — pages/join/links work from anywhere,
+  but client screen CAPTURE is browser-blocked without https. Share tests go
+  through the funnel `https://` link.
 
 - **Proof:** live handshake probe through gateway (`offer` as client, late
   `join` as technician) -> technician received stored offer. Server/Caddy/
