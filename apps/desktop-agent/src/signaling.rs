@@ -41,11 +41,14 @@ impl SignalingClient {
         let (tx, mut internal_rx) = mpsc::channel(100);
         let (internal_tx, rx) = mpsc::channel(100);
 
-        // Send join message (server routes by real session id, not the secret token)
+        // Send join message (server routes by real session id, not the secret token).
+        // Role MUST be 'client': the server relays offer/answer between the
+        // 'client' slot and the technician. 'agent' would land in the
+        // technician slot and media could never route agent<->technician.
         let join_msg = serde_json::json!({
             "type": "join",
             "session_id": session_id,
-            "role": "agent"
+            "role": "client"
         });
 
         ws_sender

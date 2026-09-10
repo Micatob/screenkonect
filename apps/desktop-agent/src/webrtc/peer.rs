@@ -16,8 +16,15 @@ impl PeerConnection {
     pub async fn create_offer(&self) -> Result<String> {
         info!("Creating WebRTC offer");
 
-        // In production, this would use the webrtc-rs library to create a real SDP offer
-        // For now, we create a placeholder that represents the offer structure
+        // MEDIA GAP (not yet real): this returns a placeholder SDP so the
+        // signaling handshake can be exercised end to end, but no media flows.
+        // To finish: build a real RTCPeerConnection with the `webrtc` crate,
+        // add a sendonly video transceiver fed by an encoder (e.g. openh264
+        // over the DXGI/GDI frames from capture::ScreenCapture), open a
+        // 'control' RTCDataChannel, and route its messages to
+        // WebRtcPeer::handle_input_event. The dashboard side already speaks
+        // exactly that protocol (offer/answer/ice-candidate via /ws/signaling,
+        // control/file data channels). Verify with CI (agent-release.yaml).
         let offer = serde_json::json!({
             "type": "offer",
             "sdp": "v=0\r\n\

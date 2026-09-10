@@ -383,6 +383,38 @@ Files changed 2026-09-07:
   Copy join link (= funnel https), open on Android in Chrome (not WhatsApp
   in-app browser), Allow, then complete Android system sheets.
 
+## Session 2026-09-10 (late) - mobile purged, agent protocol-fixed, PAUSED (PC cooling)
+
+- **Mobile removed completely** (user call): backend `Platform` + join enum now
+  `windows|macos|linux` only (session rebuilt+restarted, healthy); consent
+  blocks phones with "Computer required"; all mobile UI/branches, PWA
+  manifest+metas deleted. Only the gate's UA sniff remains.
+- **File upload FIXED + user-confirmed working on PC.** Root cause was the
+  technician creating the `file` data channel after negotiation (no re-offer
+  support) so it stayed dead silently. Now `control`+`file` are pre-created
+  before the answer; clipboard listener fixed too.
+- **Desktop agent (`apps/desktop-agent`) — protocol fixed, MEDIA STILL FAKE.**
+  peer.rs returns placeholder SDP; capture logs frames only; no datachannel.
+  Fixed: join role `agent`->`client` (server only relays client<->technician),
+  input names mapped to dashboard's real events
+  (mousemove/mousedown/mouseup/click/wheel/keydown/keyup/paste). Next: real
+  RTCPeerConnection + encoder (openh264) + 'control' channel -> verify via CI
+  (agent-release.yaml). Do NOT tag a release until media is real.
+- **Mobile roadmap (doc only):** `docs/MOBILE-ROADMAP.md` — iOS impossible in
+  Safari, Android native recommended, phased plan. NOT implemented.
+- **VPS 169.35.179.55:** healthy 7/7, account exists. BLOCKED on provider
+  firewall (8090/80/443). Domain plan: `support.hiresphere.com.ng` A record
+  (Whogohost) -> VPS, then TERMIUS_VPS.md domain paste. Caddy snippet + 80/443
+  + cert volume already pushed (`09f2df5`).
+- **Local PC:** all healthy, pages <1s, login/session/join verified. Known
+  cosmetic: `screenkonect-auth` sometimes shows unhealthy label under load
+  while serving fine (healthcheck fork pressure). Gateway runs as manual
+  `screenkonect-gateway-1`; on `compose up` name conflict do
+  `docker rm -f screenkonect-gateway-1` first.
+- **User open items:** PC-to-PC live test (fresh funnel link); control is
+  page-level-only in browser (OS control needs agent); `SETUP-GUIDE.md` is the
+  read-this-later doc.
+
 ## Session 2026-09-10 - new VPS 169.35.179.55 deployed (WORKING)
 
 - Bare Debian 12 template had zero tooling — added apt prereq step

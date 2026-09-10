@@ -106,20 +106,49 @@ impl WebRtcPeer {
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
+        // Names match exactly what the technician dashboard sends over the
+        // 'control' data channel (see apps/web-dashboard/src/pages/Session.tsx
+        // attachControlHandlers). Legacy snake_case names kept for compat.
         match event_type {
-            "mouse_move" => {
+            "mousemove" | "mouse_move" => {
                 let x = payload.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
                 let y = payload.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
                 input.handle_mouse_move(x, y).await?;
+            }
+            "mousedown" => {
+                let button = payload.get("button").and_then(|v| v.as_u32()).unwrap_or(0);
+                input.handle_mouse_button(button, true).await?;
+            }
+            "mouseup" => {
+                let button = payload.get("button").and_then(|v| v.as_u32()).unwrap_or(0);
+                input.handle_mouse_button(button, false).await?;
+            }
+            // A click is press+release back to back.
+            "click" => {
+                let button = payload.get("button").and_then(|v| v.as_u32()).unwrap_or(0);
+                input.handle_mouse_button(button, true).await?;
+                input.handle_mouse_button(button, false).await?;
             }
             "mouse_button" => {
                 let button = payload.get("button").and_then(|v| v.as_u32()).unwrap_or(0);
                 let pressed = payload.get("pressed").and_then(|v| v.as_bool()).unwrap_or(false);
                 input.handle_mouse_button(button, pressed).await?;
             }
-            "mouse_wheel" => {
-                let delta_y = payload.get("deltaY").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            "wheel" | "mouse_wheel" => {
+                let delta_y = payload
+                    .get("deltaY")
+                    .or_else(|| payload.get("delta_y"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
                 input.handle_mouse_wheel(delta_y).await?;
+            }
+            "keydown" => {
+                let code = payload.get("code").and_then(|v| v.as_str()).unwrap_or("");
+                input.handle_key(code, true).await?;
+            }
+            "keyup" => {
+                let code = payload.get("code").and_then(|v| v.as_str()).unwrap_or("");
+                input.handle_key(code, false).await?;
             }
             "key" => {
                 let code = payload.get("code").and_then(|v| v.as_str()).unwrap_or("");
